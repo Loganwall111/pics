@@ -14,8 +14,11 @@ import { SkyDome } from "./celestial/SkyDome";
 import { SunMesh } from "./celestial/SunMesh";
 import { Ground } from "./environment/Ground";
 import { BiomeField } from "./environment/BiomeField";
+import { CityParks } from "./environment/CityParks";
+import { QuestTracker } from "./entities/QuestTracker";
 import { Pickups } from "./entities/Pickups";
 import { Combat } from "./entities/Combat";
+import { Hand } from "./entities/Hand";
 import { CloudLayer } from "./environment/CloudLayer";
 import { RainSystem } from "./effects/RainSystem";
 import { City } from "./buildings/City";
@@ -133,6 +136,7 @@ export function WorldScene(): React.JSX.Element {
       />
 
       <Ground />
+      <CityParks />
       <Suspense fallback={null}>
         <City />
       </Suspense>
@@ -154,7 +158,9 @@ export function WorldScene(): React.JSX.Element {
           <BiomeField />
           <Pickups />
           <Combat />
+          <QuestTracker />
         </Physics>
+      <Hand />
       </Suspense>
 
       <AmbientParticles />

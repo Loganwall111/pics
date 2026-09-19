@@ -176,3 +176,43 @@
 .lum-trait-blurb { grid-column: 1; font-size: 11px; color: #9c8cc4; }
 .lum-trait-cost { grid-row: 1 / span 2; grid-column: 2; align-self: center; color: #7fffd4; font-weight: 800; }
 .lum-evolve-hint { margin-top: 10px; font-size: 11px; color: #7f6da8; }
+
+/* ---- Circular dock (v0.3 AAA pass) ---- */
+.lum-dock {
+  position: fixed;
+  bottom: 26px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  pointer-events: auto;
+  z-index: 6;
+}
+.lum-dock-readout {
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #c6b2f0;
+  background: rgba(12, 4, 28, 0.7);
+  border: 1px solid rgba(170, 120, 255, 0.28);
+  border-radius: 999px;
+  padding: 4px 16px;
+  backdrop-filter: blur(8px);
+}
+.lum-dock-orbs { display: flex; gap: 12px; }
+.lum-orb {
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  font-size: 20px;
+  color: #d9c8ff;
+  background: radial-gradient(circle at 32% 30%, rgba(90, 50, 160, 0.85), rgba(22, 8, 46, 0.9));
+  border: 1px solid rgba(170, 120, 255, 0.4);
+  cursor: pointer;
+  box-shadow: 0 6px 22px rgba(80, 30, 160, 0.35);
+  transition: transform 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+}
+.lum-orb:hover { transform: translateY(-3px); border-color: #c9a2ff; }
+.lum-orb.active { border-color: #7fffd4; box-shadow: 0 0 20px rgba(110, 255, 210, 0.35); }

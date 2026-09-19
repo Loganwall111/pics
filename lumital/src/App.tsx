@@ -31,6 +31,7 @@ const INITIAL: JourneyState = {
 export function App(): React.JSX.Element {
   const [journey, dispatch] = useReducer(journeyReducer, INITIAL);
   const [evolveOpen, setEvolveOpen] = useState(false);
+  const [muted, setMuted] = useState(false);
   const [, forceTick] = useState(0);
   const coloniesRef = useRef<[number, number][]>([]);
   const dnaSpentRef = useRef(0);
@@ -56,7 +57,10 @@ export function App(): React.JSX.Element {
         input.evolveRequested = false;
         setEvolveOpen((v) => !v);
       }
-      if (input.muted !== lumitalAudio.muted) lumitalAudio.setMuted(input.muted);
+      if (input.muted !== lumitalAudio.muted) {
+        lumitalAudio.setMuted(input.muted);
+        setMuted(input.muted);
+      }
       if (input.colonyRequested) {
         input.colonyRequested = false;
         if (!evolveOpen && journey.colonies < 5) {
@@ -120,6 +124,7 @@ export function App(): React.JSX.Element {
           lumitalAudio.pickup();
           dispatch({ type: "collect", amount: 8 });
         }}
+        onFootstep={() => lumitalAudio.step()}
         colonies={coloniesRef.current}
       />
       <Hud
@@ -129,6 +134,12 @@ export function App(): React.JSX.Element {
         onBuy={handleBuy}
         onSeedColony={() => dispatch({ type: "colony" })}
         onMenu={() => dispatch({ type: "backToMenu" })}
+        muted={muted}
+        onToggleMute={() => {
+          lumitalAudio.resume();
+          lumitalAudio.setMuted(!lumitalAudio.muted);
+          setMuted(lumitalAudio.muted);
+        }}
       />
     </div>
   );

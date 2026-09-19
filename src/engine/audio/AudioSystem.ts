@@ -122,6 +122,56 @@ export class AudioSystem {
     }
   }
 
+  /** Soft outdoor ambience: distant hum + occasional bird chirps (v1.2). */
+  startAmbience(): void {
+    const ctx = this.ctx;
+    if (!ctx || !this.master || !this.noiseBuffer) return;
+    if (this.ambienceStarted) return;
+    this.ambienceStarted = true;
+    try {
+      // City hum: looped noise through a deep lowpass at a whisper.
+      const src = ctx.createBufferSource();
+      src.buffer = this.noiseBuffer;
+      src.loop = true;
+      const lp = ctx.createBiquadFilter();
+      lp.type = "lowpass";
+      lp.frequency.value = 220;
+      const gain = ctx.createGain();
+      gain.gain.value = 0.022;
+      src.connect(lp).connect(gain).connect(this.master);
+      src.start();
+      // Bird chirps: two-note descenders at random intervals.
+      const chirp = (): void => {
+        if (!this.muted) {
+          const t0 = ctx.currentTime + 0.01;
+          for (const [f, dt] of [[2350, 0], [1980, 0.09]] as const) {
+            const osc = ctx.createOscillator();
+            const g2 = ctx.createGain();
+            osc.type = "sine";
+            osc.frequency.setValueAtTime(f, t0 + dt);
+            osc.frequency.exponentialRampToValueAtTime(f * 0.82, t0 + dt + 0.07);
+            g2.gain.setValueAtTime(0.0001, t0 + dt);
+            g2.gain.exponentialRampToValueAtTime(0.035, t0 + dt + 0.012);
+            g2.gain.exponentialRampToValueAtTime(0.0001, t0 + dt + 0.09);
+            osc.connect(g2).connect(this.master!);
+            osc.start(t0 + dt);
+            osc.stop(t0 + dt + 0.12);
+            osc.onended = () => {
+              osc.disconnect();
+              g2.disconnect();
+            };
+          }
+        }
+        window.setTimeout(chirp, 5000 + Math.random() * 9000);
+      };
+      window.setTimeout(chirp, 3500);
+    } catch (err) {
+      console.warn("[audio] ambience failed:", err);
+    }
+  }
+
+  private ambienceStarted = false;
+
   /** Gibberish speech chirp (villager dialogue voices, Animal-Crossing style). */
   speech(): void {
     const ctx = this.ctx;

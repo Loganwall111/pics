@@ -1,6 +1,6 @@
 import { useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
-import { CapsuleGeometry, ConeGeometry, Group, MeshStandardMaterial, SphereGeometry, TorusGeometry, Color } from "three";
+import { CanvasTexture, RepeatWrapping, CapsuleGeometry, ConeGeometry, Group, MeshStandardMaterial, SphereGeometry, TorusGeometry, Color } from "three";
 import type { Species } from "../game/creatures";
 import { glowIntensity, totalLimbPairs, type TraitLevels } from "../game/traits";
 
@@ -44,8 +44,48 @@ export function Creature({
   const mats = useMemo(() => {
     const bodyColor = new Color().setHSL(plan.hue / 360, 0.72, 0.5);
     const accentColor = new Color().setHSL(plan.hueAccent / 360, 0.85, 0.6);
+
+    // Procedural skin: spots / stripes / rings painted in the accent hue
+    // (v0.3 — creatures have real texture maps now).
+    const cv = document.createElement("canvas");
+    cv.width = 128;
+    cv.height = 128;
+    const ctx = cv.getContext("2d");
+    if (!ctx) throw new Error("creature: canvas unavailable");
+    ctx.fillStyle = `hsl(${plan.hue} 70% 46%)`;
+    ctx.fillRect(0, 0, 128, 128);
+    const accent = `hsl(${plan.hueAccent} 85% 60%)`;
+    const darken = `hsl(${plan.hue} 70% 30%)`;
+    if (plan.pattern === "spots") {
+      for (let i = 0; i < 26; i++) {
+        const x = (i * 61) % 128;
+        const y = (i * 97 + 31) % 128;
+        ctx.fillStyle = i % 3 === 0 ? darken : accent;
+        ctx.beginPath();
+        ctx.arc(x, y, 5 + (i * 13) % 7, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    } else if (plan.pattern === "stripes") {
+      for (let x = 0; x < 128; x += 12) {
+        ctx.fillStyle = x % 24 === 0 ? darken : accent;
+        ctx.fillRect(x, 0, 5, 128);
+      }
+    } else if (plan.pattern === "rings") {
+      for (let r = 10; r < 90; r += 16) {
+        ctx.strokeStyle = accent;
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.arc(64, 64, r, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    }
+    const skin = new CanvasTexture(cv);
+    skin.wrapS = RepeatWrapping;
+    skin.wrapT = RepeatWrapping;
+    skin.repeat.set(2, 2);
+
     return {
-      body: new MeshStandardMaterial({ color: bodyColor, roughness: 0.42, metalness: 0.12 }),
+      body: new MeshStandardMaterial({ map: skin, color: bodyColor, roughness: 0.42, metalness: 0.12 }),
       accent: new MeshStandardMaterial({ color: accentColor, roughness: 0.35, metalness: 0.2 }),
       eye: new MeshStandardMaterial({ color: 0x0b0e14, roughness: 0.15, emissive: accentColor, emissiveIntensity: 0.5 }),
       glow: new MeshStandardMaterial({ color: accentColor, roughness: 0.3, emissive: accentColor, emissiveIntensity: 1, transparent: true, opacity: 0.85 }),

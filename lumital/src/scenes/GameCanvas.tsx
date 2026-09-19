@@ -3,15 +3,22 @@ import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import {
   AdditiveBlending,
   BackSide,
+  BufferAttribute,
+  BufferGeometry,
+  CanvasTexture,
   BoxGeometry,
   Color,
   ConeGeometry,
   DoubleSide,
   Group,
   IcosahedronGeometry,
+  CircleGeometry,
   MeshBasicMaterial,
   MeshStandardMaterial,
+  NormalBlending,
   PlaneGeometry,
+  Points,
+  PointsMaterial,
   RingGeometry,
   ShaderMaterial,
   SphereGeometry,
@@ -19,6 +26,7 @@ import {
   Vector3,
 } from "three";
 import { WORLDS, type WorldId } from "../game/worlds";
+import { findPondSpots, type PondSpot } from "../game/liquids";
 import { getSpecies } from "../game/creatures";
 import { speedMultiplier, type TraitLevels } from "../game/traits";
 import { PORTAL_POS, moteLayout } from "../game/layout";
@@ -33,6 +41,8 @@ import soilUrl from "../assets/farm-soil.jpg";
 import stoneUrl from "../assets/stone-wall.jpg";
 import {
   BLACKHOLE_FRAGMENT,
+  LIQUID_FRAGMENT,
+  LIQUID_VERTEX,
   MENGER_FRAGMENT,
   PSYCHEDELIC_FRAGMENT,
   SKY_VERTEX,
@@ -292,12 +302,14 @@ function CreatureController({
   bodyRef,
   onArrivePortal,
   onCollectMote,
+  onFootstep,
   motePositions,
 }: {
   speciesIndex: number;
   levels: TraitLevels;
   world: WorldId;
   input: JourneyInput;
+  onFootstep: () => void;
   speedRef: { current: number };
   bodyRef: React.MutableRefObject<Group | null>;
   onArrivePortal: () => void;
@@ -312,6 +324,7 @@ function CreatureController({
   const { camera } = useThree();
   const portalCooldown = useRef(0);
   const collected = useRef<Set<number>>(new Set());
+  const stepAccum = useRef(0);
   const scratch = useMemo(() => new Vector3(), []);
 
   useFrame((_, deltaRaw) => {
@@ -337,6 +350,12 @@ function CreatureController({
       pos.current.x += g.x;
       pos.current.z += g.z;
       bodyRef.current?.rotation.set(0, Math.atan2(g.x, g.z), 0);
+      // Body sounds: one soft step per ~2.3 units of travel.
+      stepAccum.current += Math.hypot(g.x, g.z);
+      if (stepAccum.current > 2.3) {
+        stepAccum.current = 0;
+        onFootstep();
+      }
     }
     speedRef.current = moving ? speed : 0;
     phase.current += (moving ? speed * dt * 2.2 : dt);
@@ -403,14 +422,17 @@ export function GameCanvas({
   input,
   onPortal,
   onCollect,
+  onFootstep,
   colonies,
 }: {
   journey: JourneyState;
   input: JourneyInput;
   onPortal: () => void;
   onCollect: () => void;
+  onFootstep: () => void;
   colonies: [number, number][];
 }): React.JSX.Element {
+  const onFootstepProp = onFootstep;
   const world = journey.world;
   const def = WORLDS[world];
   const bodyRef = useRef<Group | null>(null);
@@ -489,6 +511,8 @@ export function GameCanvas({
       <directionalLight position={[30, 60, 20]} intensity={1.1} color={new Color(...def.fogColor).lerp(new Color(1, 1, 1), 0.6)} />
       <SkyDome world={world} />
       <mesh geometry={terrainGeo} material={terrainMat} />
+      <FlowingPonds world={world} />
+      <CloudSprites />
       <WorldContent world={world} />
       <Collectibles world={world} colonies={colonies} />
       <CreatureController
@@ -500,8 +524,115 @@ export function GameCanvas({
         bodyRef={bodyRef}
         onArrivePortal={onPortal}
         onCollectMote={onCollect}
+        onFootstep={onFootstepProp}
         motePositions={moteLayoutMemo}
       />
     </Canvas>
   );
+}
+
+
+/** Glowing flowing ponds: flat terrain spots filled with an animated liquid shader (v0.3). */
+function FlowingPonds({ world }: { world: WorldId }): React.JSX.Element {
+  const spots = useMemo(() => findPondSpots(world), [world]);
+  const geometry = useMemo(() => new CircleGeometry(5.2, 40), []);
+  const material = useMemo(
+    () =>
+      new ShaderMaterial({
+        vertexShader: LIQUID_VERTEX,
+        fragmentShader: LIQUID_FRAGMENT,
+        uniforms: {
+          u_time: { value: 0 },
+          u_shallow: { value: new Color(0.55, 1.0, 0.85) },
+          u_deep: { value: new Color(0.05, 0.25, 0.4) },
+        },
+        transparent: true,
+        depthWrite: false,
+      }),
+    []
+  );
+  useEffect(() => () => {
+    geometry.dispose();
+    material.dispose();
+  }, [geometry, material]);
+  useFrame(({ clock }) => {
+    const uTime = material.uniforms.u_time;
+    if (uTime) uTime.value = clock.elapsedTime;
+  });
+  return (
+    <group>
+      {spots.map((p: PondSpot, i: number) => (
+        <mesh key={i} geometry={geometry} material={material} position={[p.x, p.y, p.z]} rotation={[-Math.PI / 2, 0, 0]} />
+      ))}
+    </group>
+  );
+}
+
+/** Drifting soft cloud sprites (v0.3): a cheap volumetric READ overhead. */
+function CloudSprites(): React.JSX.Element | null {
+  const pointsRef = useRef<Points>(null);
+  const { camera } = useThree();
+
+  const texture = useMemo(() => {
+    const cv = document.createElement("canvas");
+    cv.width = 128;
+    cv.height = 128;
+    const ctx = cv.getContext("2d");
+    if (!ctx) throw new Error("clouds: canvas unavailable");
+    for (let i = 0; i < 14; i++) {
+      const x = 64 + (Math.sin(i * 12.9898) * 43758.5453 % 1) * 44 - 22;
+      const y = 64 + (Math.sin(i * 78.233) * 43758.5453 % 1) * 30 - 15;
+      const r = 16 + ((i * 37) % 18);
+      const grad = ctx.createRadialGradient(x, y, 0, x, y, r);
+      grad.addColorStop(0, "rgba(255,255,255,0.16)");
+      grad.addColorStop(1, "rgba(255,255,255,0)");
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, 128, 128);
+    }
+    return new CanvasTexture(cv);
+  }, []);
+
+  const material = useMemo(
+    () =>
+      new PointsMaterial({
+        map: texture,
+        size: 240,
+        transparent: true,
+        opacity: 0.4,
+        depthWrite: false,
+        sizeAttenuation: true,
+        blending: NormalBlending,
+        color: new Color(0.9, 0.85, 1.0),
+      }),
+    [texture]
+  );
+  const geometry = useMemo(() => {
+    const g = new BufferGeometry();
+    const positions = new Float32Array(36 * 3);
+    for (let i = 0; i < 36; i++) {
+      positions[i * 3] = (Math.sin(i * 91.7) * 43758.5453 % 1) * 1200 - 600;
+      positions[i * 3 + 1] = 95 + (Math.sin(i * 47.3) * 43758.5453 % 1) * 45;
+      positions[i * 3 + 2] = (Math.sin(i * 13.1) * 43758.5453 % 1) * 1200 - 600;
+    }
+    g.setAttribute("position", new BufferAttribute(positions, 3));
+    return g;
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      texture.dispose();
+      material.dispose();
+      geometry.dispose();
+    };
+  }, [texture, material, geometry]);
+
+  useFrame((_, delta) => {
+    const pts = pointsRef.current;
+    if (!pts) return;
+    pts.position.x += delta * 1.6;
+    if (pts.position.x > 600) pts.position.x = -600;
+    pts.position.z = Math.round(camera.position.z / 600) * 600;
+  });
+
+  return <points ref={pointsRef} geometry={geometry} material={material} frustumCulled={false} renderOrder={-50} />;
 }

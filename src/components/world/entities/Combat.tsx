@@ -11,7 +11,7 @@ import {
 } from "three";
 import { RigidBody, type RapierRigidBody } from "@react-three/rapier";
 import { coneTarget, offCooldown, throwVelocity } from "@/lib/simulation/combat";
-import { ITEMS, type ItemId } from "@/lib/simulation/items";
+import { DEFAULT_GUN, ITEMS, type GunDef, type ItemId } from "@/lib/simulation/items";
 import { useInventoryStore } from "@/state/stores/inventoryStore";
 import { useSimulationStore } from "@/state/stores/simulationStore";
 import { frameState } from "@/state/transient/frameState";
@@ -33,9 +33,8 @@ import { audio } from "@/engine/audio/AudioSystem";
 
 const MELEE_RANGE = 2.6;
 const MELEE_HALF_ANGLE = 0.7;
-const SHOOT_RANGE = 40;
-const SHOOT_HALF_ANGLE = 0.12;
 const SHOOT_COOLDOWN = 0.35;
+const DEFAULT_GUN_FALLBACK: GunDef = DEFAULT_GUN;
 const THROW_COOLDOWN = 0.6;
 const THROW_POWER = 13;
 const BALL_POOL = 6;
@@ -56,7 +55,7 @@ export function Combat(): React.JSX.Element {
 
   const beamGeo = useMemo(() => {
     const g = new BufferGeometry();
-    g.setAttribute("position", new BufferAttribute(new Float32Array([0, 1.2, 0, 0, 1.2, SHOOT_RANGE]), 3));
+    g.setAttribute("position", new BufferAttribute(new Float32Array([0, 1.2, 0, 0, 1.2, 48]), 3));
     return g;
   }, []);
   const beamMat = useMemo(
@@ -117,15 +116,24 @@ export function Combat(): React.JSX.Element {
 
     if (input.wasPressed(SimAction.Shoot) && offCooldown(cooldowns.current.shoot, now, SHOOT_COOLDOWN)) {
       cooldowns.current.shoot = now;
-      const t = coneTarget(pp.x, pp.z, yaw, SHOOT_RANGE, SHOOT_HALF_ANGLE, rosterTargets);
-      if (t !== null) npcShared.panicUntil[t.id] = now + 5;
+      // Gun behaviour comes from the equipped item (v1.2 §guns).
+      const inv = useInventoryStore.getState();
+      const equippedSlot = inv.slots[inv.selected];
+      const def = equippedSlot ? ITEMS[equippedSlot.id] : undefined;
+      const gun = def?.gun ?? DEFAULT_GUN_FALLBACK;
+      if (def) beamMat.color.set(def.color);
+
+      // Center shot + optional spread pair; every hit target panics.
+      const shots = gun.spreadShots > 0 ? [-gun.spreadYaw, 0, gun.spreadYaw] : [0];
+      for (const off of shots) {
+        const t = coneTarget(pp.x, pp.z, yaw + off, gun.range, gun.halfAngle, rosterTargets);
+        if (t !== null) npcShared.panicUntil[t.id] = now + 5;
+      }
       const beam = beamRef.current;
       if (beam) {
         const attr = beam.geometry.getAttribute("position") as BufferAttribute;
-        const equipped = useInventoryStore.getState().slots[useInventoryStore.getState().selected];
-        const def = equipped ? ITEMS[equipped.id] : undefined;
-        if (def) beamMat.color.set(def.color);
-        const dist = t !== null ? Math.hypot(t.x - pp.x, t.z - pp.z) : SHOOT_RANGE;
+        const t = coneTarget(pp.x, pp.z, yaw, gun.range, gun.halfAngle, rosterTargets);
+        const dist = t !== null ? Math.hypot(t.x - pp.x, t.z - pp.z) : gun.range;
         attr.setX(1, pp.x + Math.sin(yaw) * dist);
         attr.setY(1, 1.2);
         attr.setZ(1, pp.z + Math.cos(yaw) * dist);

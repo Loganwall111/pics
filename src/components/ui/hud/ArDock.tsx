@@ -75,14 +75,26 @@ const DOCK_ITEMS: DockItem[] = [
 export function ArDock(): React.JSX.Element {
   const active = useSettingsStore((s) => s.arPanel);
   const setArPanel = useSettingsStore((s) => s.setArPanel);
+  const hovered = useSettingsStore((s) => s.arPanelHover);
+  const setHover = useSettingsStore((s) => s.setArPanelHover);
+
+  // AAA dock (v1.2): the readout sits ABOVE the circular buttons and
+  // mirrors the hovered/active orb's label.
+  const readout =
+    DOCK_ITEMS.find((i) => i.id === (hovered ?? active))?.label ??
+    (hovered === "firstPerson" ? "First person" : "AETHER");
 
   return (
     <div className="ar-dock">
+      <div className="ar-dock-readout">{readout}</div>
+      <div className="ar-dock-row">
       {DOCK_ITEMS.map((item) => (
         <button
           key={item.id}
           className={`ar-orb ${active === item.id ? "active" : ""}`}
           onClick={() => setArPanel(active === item.id ? "none" : item.id)}
+          onMouseEnter={() => setHover(item.id)}
+          onMouseLeave={() => setHover(null)}
           aria-label={item.label}
           title={item.label}
         >
@@ -95,6 +107,8 @@ export function ArDock(): React.JSX.Element {
         onClick={() => {
           frameState.firstPerson = !frameState.firstPerson;
         }}
+        onMouseEnter={() => setHover("firstPerson")}
+        onMouseLeave={() => setHover(null)}
         aria-label="First person"
         title="First person (V)"
       >
@@ -103,6 +117,7 @@ export function ArDock(): React.JSX.Element {
           <path d="M5.5 20c.8-3.6 3.4-5.6 6.5-5.6s5.7 2 6.5 5.6" />
         </svg>
       </button>
+      </div>
     </div>
   );
 }

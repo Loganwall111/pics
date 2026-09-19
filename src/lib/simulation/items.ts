@@ -8,8 +8,28 @@ import { RngStream } from "@/lib/math/Random";
  * the store is a thin wrapper.
  */
 
-export const ITEM_IDS = ["repair_cell", "pulse_core", "strange_seed", "scrap", "med_gel"] as const;
+export const ITEM_IDS = [
+  "repair_cell",
+  "pulse_core",
+  "strange_seed",
+  "scrap",
+  "med_gel",
+  "ion_pistol",
+  "scatter_spitter",
+] as const;
 export type ItemId = (typeof ITEM_IDS)[number];
+
+/** Gun behaviour for shoot-capable items (v1.2 §guns). */
+export interface GunDef {
+  /** Hitscan range in metres. */
+  range: number;
+  /** Half-angle of the aim cone (radians). */
+  halfAngle: number;
+  /** Extra shots fired at ±spreadYaw around the aim (0 = single). */
+  spreadShots: number;
+  /** Yaw offset per spread shot (radians). */
+  spreadYaw: number;
+}
 
 export interface ItemDef {
   id: ItemId;
@@ -17,7 +37,11 @@ export interface ItemDef {
   color: string;
   /** Thrown-item damage when it lands on someone (fun > realism). */
   throwDamage: number;
+  /** Present when the item is a gun usable with F. */
+  gun?: GunDef;
 }
+
+export const DEFAULT_GUN: GunDef = { range: 40, halfAngle: 0.12, spreadShots: 0, spreadYaw: 0 };
 
 export const ITEMS: Record<ItemId, ItemDef> = {
   repair_cell: { id: "repair_cell", name: "Repair Cell", color: "#59d9ff", throwDamage: 4 },
@@ -25,6 +49,20 @@ export const ITEMS: Record<ItemId, ItemDef> = {
   strange_seed: { id: "strange_seed", name: "Strange Seed", color: "#7fff9e", throwDamage: 2 },
   scrap: { id: "scrap", name: "Scrap", color: "#c9b48a", throwDamage: 3 },
   med_gel: { id: "med_gel", name: "Med Gel", color: "#ff7f9e", throwDamage: 1 },
+  ion_pistol: {
+    id: "ion_pistol",
+    name: "Ion Pistol",
+    color: "#7fd8ff",
+    throwDamage: 6,
+    gun: { range: 48, halfAngle: 0.1, spreadShots: 0, spreadYaw: 0 },
+  },
+  scatter_spitter: {
+    id: "scatter_spitter",
+    name: "Scatter Spitter",
+    color: "#ffb45f",
+    throwDamage: 10,
+    gun: { range: 26, halfAngle: 0.3, spreadShots: 2, spreadYaw: 0.14 },
+  },
 };
 
 export const MAX_STACK = 8;

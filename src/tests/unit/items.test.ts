@@ -51,6 +51,18 @@ describe("scatterPickups", () => {
     expect(a.length).toBeGreaterThan(12);
   });
 
+  it("defines two guns with sane fields", () => {
+    const pistol = ITEMS.ion_pistol.gun;
+    const scatter = ITEMS.scatter_spitter.gun;
+    expect(pistol).toBeDefined();
+    expect(scatter).toBeDefined();
+    if (pistol && scatter) {
+      expect(scatter.range).toBeLessThan(pistol.range);
+      expect(scatter.halfAngle).toBeGreaterThan(pistol.halfAngle);
+      expect(scatter.spreadShots).toBe(2);
+    }
+  });
+
   it("uses only known item ids", () => {
     for (const p of scatterPickups(7)) {
       expect(Object.keys(ITEMS)).toContain(p.item);

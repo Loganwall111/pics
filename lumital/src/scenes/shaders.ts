@@ -193,3 +193,55 @@ void main() {
   gl_FragColor = vec4(col, 1.0);
 }
 `;
+
+export const LIQUID_VERTEX = /* glsl */ `
+precision highp float;
+varying vec2 vUvC;
+varying vec3 vLocal;
+void main() {
+  vUvC = uv;
+  vLocal = position;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}
+`;
+
+export const LIQUID_FRAGMENT = /* glsl */ `
+precision highp float;
+varying vec2 vUvC;
+varying vec3 vLocal;
+uniform float u_time;
+uniform vec3 u_shallow;
+uniform vec3 u_deep;
+
+vec3 hash33(vec3 p) {
+  p = fract(p * vec3(0.1031, 0.103, 0.0973));
+  p += dot(p, p.yxz + 33.33);
+  return fract((p.xxy + p.yxx) * p.zyx);
+}
+
+float noise2(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  float a = hash33(vec3(i, 7.0)).x;
+  float b = hash33(vec3(i + vec2(1.0, 0.0), 7.0)).x;
+  float c = hash33(vec3(i + vec2(0.0, 1.0), 7.0)).x;
+  float d = hash33(vec3(i + vec2(1.0, 1.0), 7.0)).x;
+  return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
+
+void main() {
+  float r = length(vLocal.xy);
+  float edge = 1.0 - smoothstep(3.9, 4.9, r);
+  float ang = atan(vLocal.y, vLocal.x);
+  vec2 swirl = vec2(cos(ang + u_time * 0.4), sin(ang + u_time * 0.4)) * 0.35;
+  vec2 flow = swirl + vec2(u_time * 0.18, -u_time * 0.11);
+  float n = noise2(vUvC * 9.0 + flow) * 0.6 + noise2(vUvC * 21.0 - flow * 1.6) * 0.4;
+  float glints = smoothstep(0.78, 0.95, n);
+  vec3 col = mix(u_deep, u_shallow, n * 0.85 + 0.1 * sin(u_time * 0.8 + vLocal.y * 2.0));
+  col += vec3(0.85, 1.0, 0.9) * glints * 0.35;
+  float alpha = 0.82 * edge + glints * 0.12;
+  if (alpha < 0.02) discard;
+  gl_FragColor = vec4(col, alpha);
+}
+`;

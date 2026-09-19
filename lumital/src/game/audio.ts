@@ -109,6 +109,25 @@ class LumitalAudio {
   pickup(): void {
     this.tone(660, 990, 0.12, "sine", 0.14);
   }
+  /** Soft footstep tick (filtered noise burst). */
+  step(): void {
+    const ctx = this.ctx;
+    if (!ctx || !this.master) return;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "triangle";
+    osc.frequency.setValueAtTime(90 + Math.random() * 40, ctx.currentTime);
+    gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.045, ctx.currentTime + 0.008);
+    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.07);
+    osc.connect(gain).connect(this.master);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.09);
+    osc.onended = () => {
+      osc.disconnect();
+      gain.disconnect();
+    };
+  }
   portal(): void {
     this.tone(180, 1400, 0.7, "sawtooth", 0.1);
   }

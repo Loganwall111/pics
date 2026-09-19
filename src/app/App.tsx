@@ -28,6 +28,7 @@ export function App(): React.JSX.Element {
   const handleGesture = (): void => {
     audio.resume();
     audio.setMuted(useSettingsStore.getState().muted);
+    audio.startAmbience();
   };
 
   const handleCreated = ({ gl }: { gl: import("three").WebGLRenderer }): void => {

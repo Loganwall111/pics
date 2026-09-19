@@ -15,6 +15,8 @@ export function Hud({
   onBuy,
   onSeedColony,
   onMenu,
+  muted,
+  onToggleMute,
 }: {
   journey: JourneyState;
   evolveOpen: boolean;
@@ -22,12 +24,16 @@ export function Hud({
   onBuy: (id: TraitId) => void;
   onSeedColony: () => void;
   onMenu: () => void;
+  muted: boolean;
+  onToggleMute: () => void;
 }): React.JSX.Element {
   const world = WORLDS[journey.world];
+  const readout = muted ? "Audio muted (M)" : world.name;
   return (
     <>
       <div className="lum-hud">
         <div className="lum-hud-left">
+          <div className="lum-dock-readout">{readout}</div>
           <div className="lum-dna">◈ {journey.dna} DNA</div>
           <div className="lum-worldname">{world.name}</div>
           <div className="lum-blurb">{world.blurb}</div>
@@ -48,6 +54,23 @@ export function Hud({
           <button className="lum-menu-btn" onClick={onMenu}>
             MENU
           </button>
+        </div>
+        {/* Circular action dock (v0.3 AAA pass): readout sits above the orbs. */}
+        <div className="lum-dock">
+          <div className="lum-dock-orbs">
+            <button className="lum-orb" onClick={onToggleEvolve} title="Evolve (E)">
+              ◈
+            </button>
+            <button className="lum-orb" onClick={onSeedColony} title="Seed colony (B)">
+              ▲
+            </button>
+            <button className={`lum-orb ${muted ? "" : "active"}`} onClick={onToggleMute} title="Audio (M)">
+              ♪
+            </button>
+            <button className="lum-orb" onClick={onMenu} title="Main menu">
+              ☰
+            </button>
+          </div>
         </div>
       </div>
 

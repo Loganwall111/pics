@@ -735,3 +735,40 @@ body,
 }
 .crosshair::before { left: 6px; top: 0; width: 2px; height: 14px; }
 .crosshair::after { left: 0; top: 6px; width: 14px; height: 2px; }
+
+/* ---- Story quest pill (v1.2) ---- */
+.quest-pill {
+  position: fixed; top: 18px; left: 50%; transform: translateX(-50%);
+  z-index: 18; min-width: 300px; max-width: 420px;
+  background: linear-gradient(160deg, rgba(10, 18, 34, 0.78), rgba(8, 12, 24, 0.62));
+  border: 1px solid rgba(120, 190, 255, 0.28);
+  border-radius: 14px; padding: 10px 16px 12px;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
+}
+.quest-title { font-size: 14px; font-weight: 800; color: #cfe8ff; letter-spacing: 0.05em; }
+.quest-chapter {
+  font-size: 10px; color: #6fc6ff; border: 1px solid rgba(110, 200, 255, 0.4);
+  border-radius: 999px; padding: 1px 8px; margin-right: 8px; vertical-align: 1px;
+}
+.quest-text { font-size: 11px; color: #9fb4d0; margin: 3px 0 7px; }
+.quest-bar { height: 4px; border-radius: 999px; background: rgba(255, 255, 255, 0.1); overflow: hidden; }
+.quest-bar-fill { height: 100%; background: linear-gradient(90deg, #6fe3ff, #4f9dff); transition: width 300ms ease; }
+
+/* ---- Circular dock labels (v1.2 AAA pass) ---- */
+.ar-dock { flex-direction: column; gap: 10px; }
+.ar-dock-readout {
+  text-align: center;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  color: #9fc8e8;
+  text-transform: uppercase;
+  background: rgba(8, 14, 26, 0.55);
+  border: 1px solid rgba(120, 170, 230, 0.2);
+  border-radius: 999px;
+  padding: 4px 14px;
+  backdrop-filter: blur(8px);
+  min-height: 22px;
+}
+
+.ar-dock-row { display: flex; gap: 10px; }

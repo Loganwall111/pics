@@ -49,6 +49,8 @@ export interface SettingsState {
   menuOpen: boolean;
   /** Floating AR dock: which glass panel is open (null-closed). */
   arPanel: ArPanel;
+  /** Dock orb currently hovered (drives the readout above the buttons). */
+  arPanelHover: ArPanel | "firstPerson" | null;
   /** Master audio mute (persisted). */
   muted: boolean;
   /** Last on-foot position (persisted; restored as the spawn point). */
@@ -66,6 +68,7 @@ export interface SettingsState {
   lab: LabSettings;
 
   setArPanel: (panel: ArPanel) => void;
+  setArPanelHover: (panel: ArPanel | "firstPerson" | null) => void;
   setMenuOpen: (menuOpen: boolean) => void;
   setMuted: () => void;
   setHome: (x: number, z: number) => void;
@@ -110,6 +113,7 @@ export const useSettingsStore = create<SettingsState>()(
       mode: initialMode(),
       menuOpen: true,
       arPanel: "none",
+      arPanelHover: null,
       muted: false,
       home: { x: 0, z: 0 },
       quality: "high",
@@ -137,6 +141,7 @@ export const useSettingsStore = create<SettingsState>()(
         const open = get().arPanel === "config";
         set({ arPanel: open ? "none" : "config", showSettings: !open });
       },
+      setArPanelHover: (hover) => set({ arPanelHover: hover }),
       setMenuOpen: (menuOpen) => set({ menuOpen }),
       setMuted: () => set({ muted: !get().muted }),
       setHome: (x, z) => set({ home: { x, z } }),

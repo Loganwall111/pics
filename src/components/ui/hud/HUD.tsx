@@ -3,6 +3,8 @@ import { useSimulationStore } from "@/state/stores/simulationStore";
 import { useSettingsStore } from "@/state/stores/settingsStore";
 import { useInventoryStore } from "@/state/stores/inventoryStore";
 import { ITEMS } from "@/lib/simulation/items";
+import { useQuestStore } from "@/state/stores/questStore";
+import { objectiveLine } from "@/lib/simulation/story";
 import { selectNearbyNpcId, selectPlayerState } from "@/state/selectors";
 import { getNpcDefinition } from "@/components/world/entities/npcDefinitions";
 import { frameState } from "@/state/transient/frameState";
@@ -22,6 +24,8 @@ import { SettingsPanel } from "@/components/ui/controls/SettingsPanel";
  */
 export function HUD(): React.JSX.Element {
   const playerState = useSimulationStore(selectPlayerState);
+  const questIndex = useQuestStore((s) => s.questIndex);
+  const questProgress = useQuestStore((s) => s.progress);
   const nearbyNpcId = useSimulationStore(selectNearbyNpcId);
   const arPanel = useSettingsStore((s) => s.arPanel);
   const speedRef = useRef<HTMLSpanElement>(null);
@@ -77,6 +81,9 @@ export function HUD(): React.JSX.Element {
         <span className="hud-speed-label">{playerState === "driving" ? "GROUND" : playerState === "flying" ? "FLIGHT" : "ON FOOT"}</span>
       </div>
 
+      {/* Story objective pill (v1.2) */}
+      <QuestPill questIndex={questIndex} progress={questProgress} />
+
       {/* Contextual hint */}
       {hintVisible && <div className="hud-hint">{hint}</div>}
 
@@ -128,6 +135,24 @@ function Hotbar(): React.JSX.Element {
           )}
         </div>
       ))}
+    </div>
+  );
+}
+
+
+/** Live story objective (v1.2 §story): title + progress bar over the dock. */
+function QuestPill({ questIndex, progress }: { questIndex: number; progress: number }): React.JSX.Element {
+  // objectiveLine reads QUESTS — stable per (index, progress).
+  const line = objectiveLine({ questIndex, progress, journal: [], done: false });
+  return (
+    <div className="quest-pill">
+      <div className="quest-title">
+        <span className="quest-chapter">CH {questIndex + 1}</span> {line.title}
+      </div>
+      <div className="quest-text">{line.text}</div>
+      <div className="quest-bar">
+        <div className="quest-bar-fill" style={{ width: `${Math.round(line.ratio * 100)}%` }} />
+      </div>
     </div>
   );
 }
