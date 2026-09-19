@@ -1,0 +1,49 @@
+{
+  "name": "aether-city-simulator",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "AETHER CITY — multitask WebGL2 3D reality simulator: procedural open world, raycast vehicles, Keplerian space flight, NPC interaction and a quantum multi-mass physics laboratory.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "check:shaders": "node tools/shader-check.mjs",
+    "check:palette": "node tools/extract-palette.mjs",
+    "verify": "npm run typecheck && npm run lint && npm run test && npm run check:shaders && npm run build"
+  },
+  "dependencies": {
+    "@react-three/drei": "^10.0.0",
+    "@react-three/fiber": "^9.0.0",
+    "@react-three/postprocessing": "^3.0.0",
+    "@react-three/rapier": "^2.0.0",
+    "postprocessing": "^6.36.0",
+    "react": "~19.2.0",
+    "react-dom": "~19.2.0",
+    "three": "^0.180.0",
+    "zustand": "^5.0.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.30.0",
+    "@types/node": "^22.15.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@types/three": "^0.180.0",
+    "@vitejs/plugin-react": "^4.3.0",
+    "eslint": "^9.30.0",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "eslint-plugin-react-refresh": "^0.4.20",
+    "globals": "^16.0.0",
+    "pngjs": "^7.0.0",
+    "typescript": "^5.8.0",
+    "typescript-eslint": "^8.20.0",
+    "vite": "^6.3.0",
+    "vitest": "^3.1.0"
+  },
+  "engines": {
+    "node": ">=20.19"
+  }
+}
