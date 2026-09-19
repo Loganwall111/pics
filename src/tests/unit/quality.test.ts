@@ -16,6 +16,8 @@ describe("quality profiles", () => {
       expect(p.solverIterations).toBeGreaterThan(0);
       expect(p.starCount).toBeGreaterThan(0);
       expect(p.rainCount).toBeGreaterThanOrEqual(0);
+      expect(p.trafficCount).toBeGreaterThanOrEqual(0);
+      expect(p.birdCount).toBeGreaterThanOrEqual(0);
       expect(p.anisotropy).toBeGreaterThanOrEqual(1);
       expect(Number.isFinite(p.bloomIntensity)).toBe(true);
     }
@@ -32,6 +34,8 @@ describe("quality profiles", () => {
       expect(cur.cityRadius).toBeGreaterThanOrEqual(prev.cityRadius);
       expect(cur.solverIterations).toBeGreaterThanOrEqual(prev.solverIterations);
       expect(cur.rainCount).toBeGreaterThanOrEqual(prev.rainCount);
+      expect(cur.trafficCount).toBeGreaterThanOrEqual(prev.trafficCount);
+      expect(cur.birdCount).toBeGreaterThanOrEqual(prev.birdCount);
     }
   });
 

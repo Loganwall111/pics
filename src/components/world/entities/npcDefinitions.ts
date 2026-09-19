@@ -25,6 +25,7 @@ export const NPC_ROSTER: readonly NPCDefinition[] = [
     portraitUrl: portraitNova,
     interactRadius: 3.6,
     dialogueId: "nova",
+    index: 0,
   },
   {
     id: "atlas",
@@ -37,6 +38,7 @@ export const NPC_ROSTER: readonly NPCDefinition[] = [
     portraitUrl: portraitAtlas,
     interactRadius: 4.0,
     dialogueId: "atlas",
+    index: 1,
   },
   {
     id: "kai",
@@ -49,6 +51,7 @@ export const NPC_ROSTER: readonly NPCDefinition[] = [
     portraitUrl: portraitKai,
     interactRadius: 3.4,
     dialogueId: "kai",
+    index: 2,
   },
   {
     id: "juno",
@@ -61,6 +64,7 @@ export const NPC_ROSTER: readonly NPCDefinition[] = [
     portraitUrl: portraitJuno,
     interactRadius: 3.6,
     dialogueId: "juno",
+    index: 3,
   },
 ];
 

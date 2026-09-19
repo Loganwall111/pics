@@ -2,21 +2,27 @@ import { useEffect, useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import { Group, MeshStandardMaterial, SphereGeometry, CapsuleGeometry } from "three";
 import { SpatialHash } from "@/engine/spatial/SpatialHash";
+import { RngStream } from "@/lib/math/Random";
+import { createWanderer, stepWander, type Wanderer } from "@/lib/math/wander";
 import { NPC_ROSTER } from "./npcDefinitions";
 import { frameState } from "@/state/transient/frameState";
 import { useSimulationStore } from "@/state/stores/simulationStore";
 import { dampAngle } from "@/lib/math/Scalar";
 
 /**
- * NPC rendering + proximity management (§17).
+ * NPC rendering + proximity management (§17, §33).
  *
- * Static anchors → one SpatialHash built at mount → 10 Hz radius queries for
- * interaction availability (never per-NPC logic at frame rate). Visuals are
- * shared geometry + per-NPC accent materials, with idle bob and smooth
- * turn-to-face-player behaviour. All GPU resources are disposed on unmount.
+ * Dialogue NPCs now LIVE at their anchors rather than standing frozen: each
+ * strolls a small deterministic wander disc (shared `lib/math/wander`
+ * behaviour) and freezes to face the player when engaged. One SpatialHash
+ * built over anchor positions → 10 Hz radius queries for interaction
+ * availability (broad-phase radius padded by the wander disc). Visuals are
+ * shared geometry + per-NPC accent materials; all GPU resources disposed on
+ * unmount.
  */
 
 const QUERY_HZ = 10;
+const WANDER_RADIUS = 3.2; // NPCs stay near their anchor (dialogue reach)
 
 export function NPCManager(): React.JSX.Element {
   const groupsRef = useRef<(Group | null)[]>(NPC_ROSTER.map(() => null));
@@ -38,12 +44,27 @@ export function NPCManager(): React.JSX.Element {
     return { bodyGeometry, headGeometry, baseMaterial, accentMaterials };
   }, []);
 
-  // Proximity index over static anchors.
+  // Proximity index over anchor positions (positions padded by the wander
+  // disc; exact distances below use the live wanderer position).
   const hash = useMemo(() => {
     const h = new SpatialHash<(typeof NPC_ROSTER)[number]>(8);
     for (const npc of NPC_ROSTER) h.insert(npc);
     return h;
   }, []);
+
+  // Deterministic per-NPC strolls around each anchor (§33).
+  const wanderers = useMemo<Wanderer[]>(
+    () =>
+      NPC_ROSTER.map((npc, i) =>
+        createWanderer((0x4d65 ^ (i * 7919)) >>> 0, npc.x, npc.z, WANDER_RADIUS, 0.55, 0.95)
+      ),
+    []
+  );
+  const jitterStreams = useMemo(
+    () => NPC_ROSTER.map((_, i) => new RngStream((0x5eED ^ (i * 104729)) >>> 0)),
+    []
+  );
+  const rosterIndex = useMemo(() => new Map(NPC_ROSTER.map((npc, i) => [npc, i])), []);
 
   const queryOut = useMemo(() => [], []);
 
@@ -69,12 +90,17 @@ export function NPCManager(): React.JSX.Element {
     if (queryAccum.current >= 1 / QUERY_HZ) {
       queryAccum.current = 0;
       if (store.playerState === "on-foot" && !store.dialogue.active) {
-        const near = hash.queryRadius(pp.x, pp.z, 6, queryOut);
+        // Broad phase over anchors (+wander margin), exact phase on live pos.
+        const near = hash.queryRadius(pp.x, pp.z, 10, queryOut);
         let best: (typeof NPC_ROSTER)[number] | null = null;
         let bestD2 = Infinity;
         for (const npc of near) {
-          const dx = npc.x - pp.x;
-          const dz = npc.z - pp.z;
+          const wi = rosterIndex.get(npc);
+          const w = wi !== undefined ? wanderers[wi] : undefined;
+          const wx = w ? w.x : npc.x;
+          const wz = w ? w.z : npc.z;
+          const dx = wx - pp.x;
+          const dz = wz - pp.z;
           const d2 = dx * dx + dz * dz;
           const r = npc.interactRadius;
           if (d2 <= r * r && d2 < bestD2) {
@@ -88,19 +114,29 @@ export function NPCManager(): React.JSX.Element {
       }
     }
 
-    // --- Visuals: bob + face the player when engaged ------------------------
+    // --- Visuals: stroll, bob, face the player when engaged -----------------
     const t = clock.shaderTimeSeconds;
     for (let i = 0; i < NPC_ROSTER.length; i++) {
       const npc = NPC_ROSTER[i];
       const group = groupsRef.current[i];
       if (!npc || !group) continue;
-      group.position.set(npc.x, Math.abs(Math.sin(t * 1.7 + i * 1.9)) * 0.06, npc.z);
+      const w = wanderers[i];
+      if (!w) continue;
       const engaged = store.nearbyNpcId === npc.id || (store.dialogue.active && store.dialogue.npcId === npc.id);
-      if (engaged) {
-        const targetYaw = Math.atan2(pp.x - npc.x, pp.z - npc.z);
-        group.rotation.y = dampAngle(group.rotation.y, targetYaw, 8, delta);
+      // Engaged NPCs freeze and turn to face you; the rest keep strolling.
+      const live = npcShared.livePositions[i];
+      if (live) {
+        live.x = w.x;
+        live.z = w.z;
+      }
+      if (!engaged) {
+        const jitter = jitterStreams[i];
+        if (jitter) stepWander(w, delta, t, WANDER_RADIUS, jitter);
+        group.position.set(w.x, Math.abs(Math.sin(t * 1.7 + i * 1.9)) * 0.06, w.z);
+        group.rotation.y = dampAngle(group.rotation.y, w.yaw, 8, delta);
       } else {
-        group.rotation.y = dampAngle(group.rotation.y, npc.facing + Math.sin(t * 0.3 + i) * 0.25, 2, delta);
+        const targetYaw = Math.atan2(pp.x - w.x, pp.z - w.z);
+        group.rotation.y = dampAngle(group.rotation.y, targetYaw, 8, delta);
       }
     }
   });
@@ -135,4 +171,10 @@ export function NPCManager(): React.JSX.Element {
  * Shared player position holder — written each frame by InteractionSystem
  * from the physics body translation; read here and by the dialogue camera.
  */
-export const npcShared = { playerPosition: { x: 0, y: 1, z: 0 } };
+export const npcShared = {
+  playerPosition: { x: 0, y: 1, z: 0 },
+  /** Live (wandered) NPC positions indexed by NPC_ROSTER order — dialogue
+   * framing reads these so the camera tracks the strolling NPC, not the
+   * static anchor. */
+  livePositions: NPC_ROSTER.map(() => ({ x: 0, z: 0 })),
+};

@@ -9,6 +9,8 @@ import { getPlayerBody } from "./Player";
 import { getShipBody } from "@/components/world/space/SpaceScene";
 import { clamp, damp } from "@/lib/math/Scalar";
 import type { OriginSubject } from "@/engine/simulation/FloatingOrigin";
+import { raycastAABBs } from "@/lib/math/raycast";
+import { cityCollision } from "@/components/world/buildings/cityCollision";
 
 /**
  * Third-person chase camera (§4, §5).
@@ -125,6 +127,38 @@ export function CameraRig(): null {
       state.target.y + height + Math.sin(state.pitch) * dist,
       state.target.z + Math.cos(state.yaw) * horizontal
     );
+
+    // Building collision (§33): clamp the boom against published city AABBs
+    // so the camera never clips through facades. One segment cast per frame,
+    // allocation-free; empty box set in space/lab modes makes this a no-op.
+    if (cityCollision.count > 0) {
+      const ex = state.desired.x - state.target.x;
+      const ey = state.desired.y - state.target.y;
+      const ez = state.desired.z - state.target.z;
+      const segLen = Math.sqrt(ex * ex + ey * ey + ez * ez);
+      if (segLen > 0.001) {
+        const hit = raycastAABBs(
+          state.target.x,
+          state.target.y,
+          state.target.z,
+          ex / segLen,
+          ey / segLen,
+          ez / segLen,
+          segLen,
+          cityCollision.boxes,
+          cityCollision.count
+        );
+        if (hit < segLen) {
+          const pulled = Math.max(1.4, hit - 0.5); // keep a skin + minimum boom
+          const scale = pulled / segLen;
+          state.desired.set(
+            state.target.x + ex * scale,
+            state.target.y + ey * scale,
+            state.target.z + ez * scale
+          );
+        }
+      }
+    }
 
     const lambda = store.playerState === "flying" ? 3.2 : 7.5;
     state.pos.x = damp(state.pos.x, state.desired.x, lambda, dt);

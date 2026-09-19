@@ -28,6 +28,10 @@ export interface QualityProfile {
   starCount: number;
   /** Rain streak budget (0 disables rain rendering). */
   rainCount: number;
+  /** AI traffic car budget (0 disables traffic). */
+  trafficCount: number;
+  /** Ambient bird budget (0 disables flocks). */
+  birdCount: number;
   /** Texture anisotropy cap. */
   anisotropy: number;
 }
@@ -47,6 +51,8 @@ export const QUALITY_PROFILES: Record<QualityLevel, QualityProfile> = {
     solverIterations: 2,
     starCount: 900,
     rainCount: 0,
+    trafficCount: 0,
+    birdCount: 0,
     anisotropy: 1,
   },
   medium: {
@@ -63,6 +69,8 @@ export const QUALITY_PROFILES: Record<QualityLevel, QualityProfile> = {
     solverIterations: 4,
     starCount: 1800,
     rainCount: 1400,
+    trafficCount: 8,
+    birdCount: 5,
     anisotropy: 2,
   },
   high: {
@@ -79,6 +87,8 @@ export const QUALITY_PROFILES: Record<QualityLevel, QualityProfile> = {
     solverIterations: 6,
     starCount: 2600,
     rainCount: 2600,
+    trafficCount: 14,
+    birdCount: 8,
     anisotropy: 4,
   },
   ultra: {
@@ -95,6 +105,8 @@ export const QUALITY_PROFILES: Record<QualityLevel, QualityProfile> = {
     solverIterations: 8,
     starCount: 3600,
     rainCount: 4000,
+    trafficCount: 20,
+    birdCount: 12,
     anisotropy: 8,
   },
 };

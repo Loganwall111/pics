@@ -10,7 +10,7 @@ import {
   SphereGeometry,
 } from "three";
 import { RngStream } from "@/lib/math/Random";
-import { dampAngle } from "@/lib/math/Scalar";
+import { createWanderer, stepWander, type Wanderer } from "@/lib/math/wander";
 import { frameState } from "@/state/transient/frameState";
 import { useSettingsStore } from "@/state/stores/settingsStore";
 
@@ -29,14 +29,8 @@ const DOG_COUNT = 4;
 const WANDER_RADIUS = 26;
 
 interface DogState {
-  x: number;
-  z: number;
-  yaw: number;
-  targetX: number;
-  targetZ: number;
-  speed: number;
-  pauseUntil: number;
-  phase: number;
+  w: Wanderer;
+  jitter: RngStream;
   colorIndex: number;
 }
 
@@ -79,17 +73,11 @@ export function Dogs(): React.JSX.Element {
   const dogs = useMemo<DogState[]>(() => {
     const rng = new RngStream(citySeed ^ 0xd06);
     return Array.from({ length: count }, (_, i) => {
-      const x = (rng.float() - 0.5) * WANDER_RADIUS * 1.4;
-      const z = (rng.float() - 0.5) * WANDER_RADIUS * 1.4;
+      const homeX = (rng.float() - 0.5) * WANDER_RADIUS * 1.4;
+      const homeZ = (rng.float() - 0.5) * WANDER_RADIUS * 1.4;
       return {
-        x,
-        z,
-        yaw: rng.float() * Math.PI * 2,
-        targetX: (rng.float() - 0.5) * WANDER_RADIUS,
-        targetZ: (rng.float() - 0.5) * WANDER_RADIUS,
-        speed: 1.3 + rng.float() * 1.1,
-        pauseUntil: 0,
-        phase: rng.float() * Math.PI * 2,
+        w: createWanderer(((citySeed ^ 0xd06) + i * 7919) >>> 0, homeX, homeZ, WANDER_RADIUS, 1.3, 2.4),
+        jitter: new RngStream(((citySeed ^ 0x5eed) + i * 104729) >>> 0),
         colorIndex: i % mat.fur.length,
       };
     });
@@ -107,34 +95,16 @@ export function Dogs(): React.JSX.Element {
       const group = groupRefs.current[i];
       if (!d || !group) continue;
 
-      // Wander: pursue waypoint; on arrival, pause then choose a new one.
-      const dx = d.targetX - d.x;
-      const dz = d.targetZ - d.z;
-      const dist = Math.hypot(dx, dz);
-      let moving = true;
-      if (dist < 1.2) {
-        moving = false;
-        if (now > d.pauseUntil) {
-          const rng = new RngStream((citySeed ^ (i * 7919)) + Math.floor(now * 13));
-          d.targetX = (rng.float() - 0.5) * WANDER_RADIUS;
-          d.targetZ = (rng.float() - 0.5) * WANDER_RADIUS;
-          d.pauseUntil = now + 2 + rng.float() * 5;
-        }
-      }
-      if (moving) {
-        const step = d.speed * dt;
-        d.x += (dx / dist) * step;
-        d.z += (dz / dist) * step;
-        d.yaw = dampAngle(d.yaw, Math.atan2(dx, dz), 5, dt);
-        d.phase += d.speed * dt * 4.4;
-      }
+      // Shared wander behaviour (same tested path as NPCs/Pedestrians).
+      const speed = stepWander(d.w, dt, now, WANDER_RADIUS, d.jitter);
+      const moving = speed > 0;
 
-      group.position.set(d.x, 0.34, d.z);
-      group.rotation.y = d.yaw;
+      group.position.set(d.w.x, 0.34, d.w.z);
+      group.rotation.y = d.w.yaw;
 
       // Gait: diagonal pairs (trot).
       const legs = legRefs.current[i];
-      const s = moving ? Math.sin(d.phase) * 0.55 : 0;
+      const s = moving ? Math.sin(d.w.phase * 1.7) * 0.55 : 0;
       const l0 = legs?.[0];
       const l1 = legs?.[1];
       const l2 = legs?.[2];
@@ -148,7 +118,7 @@ export function Dogs(): React.JSX.Element {
       // Tail wag: faster when moving.
       const tail = tailRefs.current[i];
       if (tail) {
-        tail.rotation.y = Math.sin(d.phase * (moving ? 2.4 : 0.9)) * (moving ? 0.5 : 0.22);
+        tail.rotation.y = Math.sin(d.w.phase * (moving ? 2.4 : 0.9)) * (moving ? 0.5 : 0.22);
       }
       // Idle look-around.
       if (!moving) group.rotation.y += Math.sin(now * 0.7 + i * 2.1) * 0.0015;

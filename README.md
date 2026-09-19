@@ -54,7 +54,9 @@ Modes: `1` Metropolis · `2` Low-Gravity (0.165 g, alien turquoise sky) · `3` O
 | Assets | `src/assets/art/*` (AI-generated), `tools/extract-palette.mjs` | boot | bundled splash/portraits/billboards + palette-derived sky presets (§27) |
 | Weather | `engine/simulation/Weather.ts`, `effects/RainSystem.tsx`, `CloudLayer.tsx`, `shaders/terrain/wetUniforms.ts` | seeded sample per frame | deterministic 240 s cycle: cloud→rain→wind→lightning; GPU rain streaks; ground soak/dry puddle field (§33) |
 | Audio | `engine/audio/AudioSystem.ts`, `AudioLink.tsx` | per frame param sweep | WebAudio: pink-noise wind/rain, 2-osc engine w/ speed+boost mapping, thunder, UI blips; `KeyM` mute (§33) |
-| Ambient AI | `entities/Dogs.tsx`, `entities/Pedestrians.tsx`, `lib/math/paths.ts` | per frame | seeded wanderers + sidewalk circuit walkers (shared tested path fn), velocity-synced gait (§33) |
+| Ambient AI | `entities/Dogs.tsx`, `entities/Pedestrians.tsx`, `entities/Birds.tsx`, `lib/math/paths.ts`, `lib/math/wander.ts` | per frame | seeded wanderers (shared tested behaviour), sidewalk circuit walkers, rain-sheltering bird flocks — all velocity-synced (§33) |
+| AI traffic | `entities/Traffic.tsx`, `lib/simulation/traffic.ts` | per frame | cars on road-centred square loops: right-hand lanes, corner damping, rain-slowed, darkness/rain headlights (§33) |
+| Camera collision | `entities/CameraRig.tsx`, `lib/math/raycast.ts`, `buildings/cityCollision.ts` | 1 segment cast/frame | chase boom clamps against published building AABBs (slab test, allocation-free) |
 | Persistence | `state/stores/settingsStore.ts` (`persist`) | on change | mode, quality, seed, time-of-day, mute, home spawn in `aether-city-settings` (§20/§33) |
 
 ## Weather, audio & persistence (v1.0)
@@ -62,7 +64,7 @@ Modes: `1` Metropolis · `2` Low-Gravity (0.165 g, alien turquoise sky) · `3` O
 - **Weather** is a pure seeded function of simulation time (240 s cycle): cloudiness drives rain (smoothstep gate), wind, and lightning strikes (9 s mean, rain-gated). Rain soaks the ground — a shader puddle/dampness field that dries when the storm passes. Clouds thicken and the sky/fog desaturates toward overcast as coverage rises.
 - **Audio** synthesizes everything at runtime (no audio files): filtered pink noise for wind and rain, a two-oscillator engine voice mapped from speed/boost/flight, thunder on lightning strikes, and UI blips. `M` mutes; the SYSTEMS panel has an audio toggle.
 - **Persistence**: quality, seed, time-of-day, mute, and your home spawn point (saved as you explore) survive reloads. Spawning returns you to your last home.
-- **Ambient life**: seeded dogs and pedestrians walk the city with velocity-synced gaits; pedestrians follow shared, unit-tested sidewalk circuits.
+- **Ambient life**: seeded dogs and pedestrians walk the city with velocity-synced gaits; pedestrians follow shared, unit-tested sidewalk circuits. **AI traffic** drives the road grid with right-hand lanes, rain-slowed speeds and headlights that respond to darkness and storms; **bird flocks** circle the skyline and land while it pours. The chase camera now collides with buildings (ray-vs-AABB clamped boom).
 
 ## Validation results (executed, not claimed)
 
@@ -81,7 +83,7 @@ Modes: `1` Metropolis · `2` Low-Gravity (0.165 g, alien turquoise sky) · `3` O
 
 - GodRays/Bloom require a quality tier ≥ medium (LOW disables the composer by design).
 - Circular-orbit (e ≈ 0) element roundtrips are excluded from tests: ω is mathematically degenerate there (covered by a dedicated circular identity test instead).
-- Chase camera does not collide with buildings. Clouds are layered soft-particle volumetrics (raymarched upgrade documented). Dogs are visual-only (no physics bodies). Street wetness/puddles are a shading model, not a water simulation.
-- NPC anchors are static (bob/facing animate around fixed positions); streaming/AI NPCs are architecture-ready but not implemented (§33 extensibility list).
+- Clouds are layered soft-particle volumetrics (raymarched upgrade documented). Dogs, pedestrians and traffic are visual-only (no physics bodies) — by design, to keep the 16.6 ms budget on the player and hero vehicle. Street wetness/puddles are a shading model, not a water simulation.
+- Dialogue NPCs stroll within ~3 m of their anchor (reachable + framed correctly in dialogue) rather than roaming the whole city.
 - Planetary radii are visually exaggerated ×3; orbital time is compressed ×260 (both documented in `SpaceScene.tsx`); ship physics itself is unscaled Newtonian.
 - StrictMode is intentionally off (double-mounted WebGL/physics boot cost); effects are written idempotent regardless.

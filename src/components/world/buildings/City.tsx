@@ -19,6 +19,8 @@ import {
   Texture,
 } from "three";
 import { generateCity } from "@/lib/geometry/citygen";
+import { cityCollision } from "./cityCollision";
+import { aabbFromFootprint } from "@/lib/math/raycast";
 import { getQualityProfile } from "@/engine/rendering/quality";
 import { useSettingsStore } from "@/state/stores/settingsStore";
 import { selectQuality } from "@/state/selectors";
@@ -67,6 +69,20 @@ export function City(): React.JSX.Element {
     () => generateCity(citySeed, { blockSize: 46, roadWidth: 12, gridRadius: 5, maxHeight: 96, plaza: true }),
     [citySeed]
   );
+
+  // --- Collision publisher (chase-camera AABBs, §33) ------------------------
+  useEffect(() => {
+    cityCollision.boxes = layout.buildings.map((b) =>
+      aabbFromFootprint(b.x, b.z, b.width, b.depth, b.height, {
+        minX: 0, maxX: 0, minY: 0, maxY: 0, minZ: 0, maxZ: 0,
+      })
+    );
+    cityCollision.count = cityCollision.boxes.length;
+    return () => {
+      cityCollision.boxes = [];
+      cityCollision.count = 0;
+    };
+  }, [layout]);
 
   // --- Buildings (instanced) ------------------------------------------------
   const buildingGeometry = useMemo(() => {

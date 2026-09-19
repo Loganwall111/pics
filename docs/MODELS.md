@@ -89,3 +89,26 @@ documented above.
   no physics bodies by design (16.6 ms budget stays with player + vehicles).
 - **Persistence**: `settingsStore` persists mode, quality, citySeed, timeOfDay, timeScale,
   mute, and home spawn (key `aether-city-settings`).
+
+## Traffic, birds, wandering NPCs, camera collision (§33 completion, v1.0)
+
+No new art assets — everything below is procedural and code-authored.
+
+- **Traffic** (`src/components/world/entities/Traffic.tsx` + `src/lib/simulation/traffic.ts`):
+  cars run square loops on road centrelines at `(k+½)·46` m (`streetLoopRadii`, unit-tested),
+  right-hand lane offset 2.2 m, arc-length integration via the shared `squareLoopPoint`.
+  Rain slows traffic to 70 % (`trafficSpeedFactor`) and forces headlights; darkness
+  (dusk 18–20 h, dawn 05–07 h, full night) raises head/tail emissive intensity
+  (`headlightIntensity`, unit-tested). Counts: 0 low / 8 medium / 14 high / 20 ultra.
+- **Birds** (`src/components/world/entities/Birds.tsx`): flock orbits a slow drifting centre,
+  per-bird slot offsets + flap phase; shelters (`visible=false`, work skipped) while
+  rain > 0.45. Counts: 0 low / 5 medium / 8 high / 12 ultra.
+- **Wander behaviour** (`src/lib/math/wander.ts`): one deterministic, replay-pinned
+  implementation backs dogs (radius 26 m), dialogue NPCs (radius 3.2 m — engaged NPCs
+  freeze and face you) and is unit-tested for determinism, home-disc containment and
+  pause handling. Dialogue framing uses live positions (`npcShared.livePositions`).
+- **Camera collision** (`src/lib/math/raycast.ts` + `buildings/cityCollision.ts`): City
+  publishes world-space building AABBs at build time; the chase boom casts one segment
+  per frame (Kay–Kajiya slab test, allocation-free) and pulls in to the hit minus a
+  0.5 m skin (1.4 m minimum boom). Unit-tested: hits, misses, nearest-of-several,
+  behind-ray, origin-inside, maxDist sentinel.

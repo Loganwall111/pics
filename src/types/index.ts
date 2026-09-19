@@ -112,6 +112,8 @@ export interface CityLayout {
 /** One NPC defined in the world (static anchor; visuals animate around it). */
 export interface NPCDefinition {
   id: string;
+  /** Roster order — indexes into shared live-position holders. */
+  readonly index: number;
   name: string;
   role: string;
   x: number;

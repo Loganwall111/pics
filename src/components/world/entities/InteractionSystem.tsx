@@ -80,7 +80,16 @@ export function InteractionSystem(): null {
       onFoot: store.playerState === "on-foot",
       nearestNpc:
         npc && nearNpcId
-          ? { id: npc.id, position: { x: npc.x, y: 0, z: npc.z }, interactRadius: npc.interactRadius }
+          ? {
+              id: npc.id,
+              // Live wandered position (falls back to the anchor).
+              position: {
+                x: npcShared.livePositions[npc.index ?? -1]?.x ?? npc.x,
+                y: 0,
+                z: npcShared.livePositions[npc.index ?? -1]?.z ?? npc.z,
+              },
+              interactRadius: npc.interactRadius,
+            }
           : null,
       nearestVehicle:
         store.playerState === "on-foot" && heroBody && vehicleNear()

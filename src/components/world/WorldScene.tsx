@@ -22,6 +22,8 @@ import { CameraRig } from "./entities/CameraRig";
 import { NPCManager, npcShared } from "./entities/NPCManager";
 import { Dogs } from "./entities/Dogs";
 import { Pedestrians } from "./entities/Pedestrians";
+import { Traffic } from "./entities/Traffic";
+import { Birds } from "./entities/Birds";
 import { InteractionSystem } from "./entities/InteractionSystem";
 import { AmbientParticles } from "./effects/AmbientParticles";
 import { ExhaustParticles } from "./effects/ExhaustParticles";
@@ -154,6 +156,8 @@ export function WorldScene(): React.JSX.Element {
       <RainSystem />
       <Dogs />
       <Pedestrians />
+      <Traffic />
+      <Birds />
 
       <CameraRig />
       <InteractionSystem />
