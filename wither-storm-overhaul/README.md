@@ -193,6 +193,30 @@ Three further defects fell out of the same hole:
 
 **The guard:** `palette_tables.check_routing()` fails the build if any Java file outside `McsmPhaseTimeline` states a phase window, or if either consumer stops delegating. Verified both ways — **exit 1 on the pre-fix tree, exit 0 on the fixed one.**
 
+## Finding 3: Java and the shader were drawing different mouths (patch 04)
+
+GROUND_TRUTH §D.1 makes the **teeth** your number-one priority fix, and `check_phase_uniform.py` states the contract in as many words — *"the teeth are WHITE at every storm phase; the aura is what changes colour"* — then enforces it on the shaders. `mcsm_teeth_color()` returns `vec3(1.0)` for `p >= 4.0`.
+
+`McsmTeethPhaseTint` said exactly that in its header, and then did the opposite in its tables. Comparing the two implementations phase by phase, they disagreed on **every single row**:
+
+| phase | shader teeth | java teeth | shader aura | java aura |
+|---|---|---|---|---|
+| 4 | white | `(1.00,0.45,0.85)` | `(0.55,0.80,1.00)` | `(0.25,0.50,1.00)` |
+| 5.0 | white | `(1.00,0.35,0.90)` | `(1.00,1.00,1.00)` **pure** | `(0.30,0.55,1.00)` |
+| 5.2 | white | `(0.85,0.40,1.00)` | `(0.50,0.78,1.00)` | `(0.22,0.48,1.00)` |
+| 6 | white | `(0.70,0.35,1.00)` | `(0.22,0.42,1.00)` | `(0.18,0.42,1.00)` |
+| 7 | white | `(0.90,0.30,0.95)` | `(0.36,1.00,0.28)` **green** | `(0.20,0.50,1.00)` |
+| 8 | white | `(0.80,0.40,1.00)` | `(0.35,0.58,1.00)` | `(0.25,0.55,1.00)` |
+
+This is the *"the mouths never matched the reference frames"* symptom that very header claims to have fixed. A later "V2 revamp" moved the Java tables without moving the shader, and because the gate only ever inspected the shaders, nothing caught it. Java now takes its values from `mcsm_teeth_color()` / `mcsm_aura_color()` verbatim, verified numerically equal at all five ramp stops.
+
+Two more defects in the same file:
+
+- **`glowStrength = Math.max(glowStrength, 4.5F)` was a one-way ratchet** written straight into the player's persistent config. Walk near one storm once and your bloom setting was 4.5 in every world, forever, with nothing able to lower it. Eight further config fields were written every tick with no restore, so a storm's last frame outlived the storm and became your "normal" colours. The fields are now snapshotted at phase 4 and handed back when the storm leaves.
+- **`if (true) { ... }`** around the beam colours — an unconditional block wearing a condition it never tested.
+
+**One thing I deliberately did not change.** GROUND_TRUTH §G.3 asks for teeth *"intensity ~1.15 — not the old pure-white 2.4 blast"*, while `check_phase_uniform.py` pins a **4.0x** floor and the entity shader carries `MCSM_MOUTH_GAIN = 4.0`, citing a later brief. Those two instructions contradict each other and nothing in the tree says which supersedes which. Rather than silently pick one, patch 04 fixes the colours (provably wrong) and leaves the brightness alone. **That one is your call** — if §G.3 wins it is a single number in the force block plus the gate's expectation.
+
 ## Apply it
 
 ```bash
@@ -213,6 +237,9 @@ git apply patches/02-remove-unused-imports.patch
 
 # 5. unbreak the GLSL gate, and put the storm on ONE phase timeline
 git apply patches/03-build-gate-and-phase-timeline.patch
+
+# 6. make Java's teeth/aura tracks say what the shader actually draws
+git apply patches/04-teeth-aura-match-shader.patch
 
 bash -n ci/build.sh          # syntax check
 ```
@@ -266,6 +293,7 @@ ci/tests/fixtures/                 5 fixtures, incl. Clean.java anti-FP guard
 patches/01-wire-preflight-into-build.sh.patch
 patches/02-remove-unused-imports.patch
 patches/03-build-gate-and-phase-timeline.patch   GLSL gate fix + one phase timeline
+patches/04-teeth-aura-match-shader.patch         teeth white, aura = shader, config no longer ratcheted
 reference/GROUND_TRUTH.md                        your design spec, recovered (see note)
 evidence/corpus-analysis.txt       152 runs / 43 failures, by error class
 evidence/preflight-results.txt     the run output on your tree
