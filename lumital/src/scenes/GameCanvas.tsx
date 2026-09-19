@@ -24,6 +24,13 @@ import { speedMultiplier, type TraitLevels } from "../game/traits";
 import { PORTAL_POS, moteLayout } from "../game/layout";
 import type { JourneyState } from "../game/journey";
 import { Creature } from "./Creature";
+import { TextureLoader, RepeatWrapping, SRGBColorSpace } from "three";
+import { lumitalAudio, worldBaseHz } from "../game/audio";
+import psyGroundUrl from "../assets/psychedelic-ground.jpg";
+import cellFloorUrl from "../assets/cell-floor.jpg";
+import grassUrl from "../assets/grass.jpg";
+import soilUrl from "../assets/farm-soil.jpg";
+import stoneUrl from "../assets/stone-wall.jpg";
 import {
   BLACKHOLE_FRAGMENT,
   MENGER_FRAGMENT,
@@ -52,6 +59,7 @@ interface JourneyInput {
   right: boolean;
   jump: boolean;
   yaw: number;
+  firstPerson: boolean;
 }
 
 function makeSkyMaterial(fragmentSrc: string, uniforms: Record<string, { value: unknown }>): ShaderMaterial {
@@ -257,7 +265,15 @@ function Collectibles({
         <mesh geometry={portalGeo} material={portalMat} />
       </group>
       {colonies.map(([x, z], i) => (
-        <mesh key={i} geometry={colonyGeo} material={colonyMat} position={[x, def.terrainHeight(x, z) + 1.3, z]} />
+        <group key={i} position={[x, def.terrainHeight(x, z), z]}>
+          {/* A colony is a real hamlet: three glowing huts + a hearth light. */}
+          {[[0, 0], [2.4, 1.1], [-1.9, 1.8]].map((hpos, h) => {
+            const hx = hpos[0] ?? 0;
+            const hz = hpos[1] ?? 0;
+            return <mesh key={h} geometry={colonyGeo} material={colonyMat} position={[hx, 1.3, hz]} />;
+          })}
+          <pointLight position={[0, 2.2, 0]} intensity={6} distance={14} color="#ffd97f" />
+        </group>
       ))}
     </group>
   );
@@ -336,13 +352,27 @@ function CreatureController({
     }
     if (bodyRef.current) bodyRef.current.position.copy(pos.current);
 
-    // Third-person orbit camera (scratch vector — no per-frame allocation).
-    const camDist = 9;
-    const camX = pos.current.x + Math.sin(input.yaw) * camDist;
-    const camZ = pos.current.z + Math.cos(input.yaw) * camDist;
-    const camY = Math.max(pos.current.y + 4.2, def.terrainHeight(camX, camZ) + 2);
-    camera.position.lerp(scratch.set(camX, camY, camZ), Math.min(1, 8 * dt));
-    camera.lookAt(pos.current.x, pos.current.y + 1.2, pos.current.z);
+    // Third-person orbit camera — or first-person (V/F1): camera rides the
+    // head and looks where yaw points.
+    if (input.firstPerson) {
+      const head = 1.9;
+      camera.position.lerp(
+        scratch.set(pos.current.x, pos.current.y + head, pos.current.z),
+        Math.min(1, 24 * dt)
+      );
+      camera.lookAt(
+        pos.current.x + Math.sin(input.yaw + Math.PI) * 4,
+        pos.current.y + head + 0.2,
+        pos.current.z + Math.cos(input.yaw + Math.PI) * 4
+      );
+    } else {
+      const camDist = 9;
+      const camX = pos.current.x + Math.sin(input.yaw) * camDist;
+      const camZ = pos.current.z + Math.cos(input.yaw) * camDist;
+      const camY = Math.max(pos.current.y + 4.2, def.terrainHeight(camX, camZ) + 2);
+      camera.position.lerp(scratch.set(camX, camY, camZ), Math.min(1, 10 * dt));
+      camera.lookAt(pos.current.x, pos.current.y + 1.2, pos.current.z);
+    }
 
     // Mote pickup (pure shared layout).
     for (let i = 0; i < motePositions.length; i++) {
@@ -402,24 +432,49 @@ export function GameCanvas({
     return geo;
   }, [def]);
 
-  const terrainMat = useMemo(
-    () =>
-      new MeshStandardMaterial({
-        color: new Color(...def.sky).offsetHSL(0.02, 0.1, 0.16),
-        roughness: 0.75,
-        metalness: 0.08,
-        emissive: new Color(...def.fogColor),
-        emissiveIntensity: 0.18,
-      }),
-    [def]
-  );
+  const terrainMat = useMemo(() => {
+    const mat = new MeshStandardMaterial({
+      color: new Color(...def.sky).offsetHSL(0.02, 0.1, 0.16),
+      roughness: 0.75,
+      metalness: 0.08,
+      emissive: new Color(...def.fogColor),
+      emissiveIntensity: 0.18,
+    });
+    // Texture overhaul: each world walks on its own photo-PBR surface.
+    const loader = new TextureLoader();
+    const url =
+      world === "void"
+        ? psyGroundUrl
+        : world === "microscopic"
+          ? cellFloorUrl
+          : world === "alienrain"
+            ? grassUrl
+            : world === "ocean"
+              ? soilUrl
+              : world === "maze"
+                ? stoneUrl
+                : cellFloorUrl; // blackhole: wet organic disk surface
+    const map = loader.load(url);
+    map.wrapS = RepeatWrapping;
+    map.wrapT = RepeatWrapping;
+    map.colorSpace = SRGBColorSpace;
+    map.repeat.set(40, 40);
+    mat.map = map;
+    return mat;
+  }, [def, world]);
 
   useEffect(() => {
     return () => {
       terrainGeo.dispose();
+      terrainMat.map?.dispose();
       terrainMat.dispose();
     };
   }, [terrainGeo, terrainMat]);
+
+  // Ambient bed follows the world; mute key handled by App.
+  useEffect(() => {
+    lumitalAudio.setWorld(worldBaseHz(world));
+  }, [world]);
 
   return (
     <Canvas

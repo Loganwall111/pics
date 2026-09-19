@@ -96,6 +96,14 @@ export function Combat(): React.JSX.Element {
     const pp = npcShared.playerPosition;
     const yaw = playerShared.camYaw;
 
+    // Equip: Digit1..5 select the hotbar slot to shoot/throw from.
+    const inv = useInventoryStore.getState();
+    if (input.wasPressed(SimAction.Slot1)) inv.select(0);
+    else if (input.wasPressed(SimAction.Slot2)) inv.select(1);
+    else if (input.wasPressed(SimAction.Slot3)) inv.select(2);
+    else if (input.wasPressed(SimAction.Slot4)) inv.select(3);
+    else if (input.wasPressed(SimAction.Slot5)) inv.select(4);
+
     if (input.wasPressed(SimAction.Punch) && offCooldown(cooldowns.current.punch, now, 0.45)) {
       cooldowns.current.punch = now;
       const t = coneTarget(pp.x, pp.z, yaw, MELEE_RANGE, MELEE_HALF_ANGLE, rosterTargets);
@@ -114,6 +122,9 @@ export function Combat(): React.JSX.Element {
       const beam = beamRef.current;
       if (beam) {
         const attr = beam.geometry.getAttribute("position") as BufferAttribute;
+        const equipped = useInventoryStore.getState().slots[useInventoryStore.getState().selected];
+        const def = equipped ? ITEMS[equipped.id] : undefined;
+        if (def) beamMat.color.set(def.color);
         const dist = t !== null ? Math.hypot(t.x - pp.x, t.z - pp.z) : SHOOT_RANGE;
         attr.setX(1, pp.x + Math.sin(yaw) * dist);
         attr.setY(1, 1.2);
@@ -126,7 +137,7 @@ export function Combat(): React.JSX.Element {
 
     if (input.wasPressed(SimAction.ThrowItem) && offCooldown(cooldowns.current.throw, now, THROW_COOLDOWN)) {
       cooldowns.current.throw = now;
-      const id: ItemId | null = useInventoryStore.getState().consumeAny();
+      const id: ItemId | null = useInventoryStore.getState().consumeSelected();
       if (id !== null) {
         throwVelocity(yaw, 0.5, THROW_POWER, aimOut);
         let slot = ballDespawn.current.findIndex((d) => d < now);
@@ -136,6 +147,12 @@ export function Combat(): React.JSX.Element {
           body.setTranslation({ x: pp.x, y: 1.4, z: pp.z }, true);
           body.setLinvel(aimOut, true);
           ballDespawn.current[slot] = now + 6;
+          // Equipped item tints the thrown ball (visual read of what you threw).
+          const def = ITEMS[id];
+          if (def) {
+            ballMat.color.set(def.color);
+            ballMat.emissive.set(def.color);
+          }
         }
       }
     }

@@ -19,9 +19,11 @@ six worlds — kaleidoscope nebulae, a raymarched Menger labyrinth, the
 motes, **evolve your body live** (limbs sprout, glow brightens, speed rises),
 and **seed colonies** to grow your lineage's empire (5 colonies = EMPIRE).
 
-## What's real (v0.1)
+## What's real (v0.2)
 
-- **Creature genesis** (`game/creatures.ts`): 108 species from seeded syllable
+- **v0.2**: 120 species (was 108); every world walks on its own photo-PBR texture (psychedelic meadow, cell membrane, grass, wet soil, stone); **colonies are real hamlets** (three glowing huts + hearth light each); **synthesized audio** — per-world ambient drone beds, pickup/portal/evolve/colony sounds, `M` mute; **V/F1 first-person toggle** (camera rides the creature's head).
+
+- **Creature genesis** (`game/creatures.ts`): 120 species from seeded syllable
   tables + full body plans (limbs, eyes, tail, antennae, fins, glow, pattern,
   hue) — deterministic, unique names, all unit-pinned.
 - **Creature renderer** (`scenes/Creature.tsx`): every body-plan field renders;

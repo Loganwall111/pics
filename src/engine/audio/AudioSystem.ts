@@ -122,6 +122,32 @@ export class AudioSystem {
     }
   }
 
+  /** Gibberish speech chirp (villager dialogue voices, Animal-Crossing style). */
+  speech(): void {
+    const ctx = this.ctx;
+    if (!ctx || !this.master || this.muted) return;
+    try {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      const pitch = 240 + Math.random() * 380;
+      osc.type = "square";
+      osc.frequency.setValueAtTime(pitch, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(pitch * (0.7 + Math.random() * 0.7), ctx.currentTime + 0.05);
+      gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.05, ctx.currentTime + 0.008);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.06);
+      osc.connect(gain).connect(this.master);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.07);
+      osc.onended = () => {
+        osc.disconnect();
+        gain.disconnect();
+      };
+    } catch (err) {
+      console.warn("[audio] speech failed:", err);
+    }
+  }
+
   /** Low melee thud (punch connect). */
   thud(): void {
     const ctx = this.ctx;

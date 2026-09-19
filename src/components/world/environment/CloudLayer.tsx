@@ -177,7 +177,7 @@ function ParticleClouds(): React.JSX.Element {
             vShade = aShade;
             vec4 mv = viewMatrix * vec4(p, 1.0);
             gl_Position = projectionMatrix * mv;
-            gl_PointSize = aSize * u_pixelRatio * (600.0 / max(-mv.z, 60.0));
+            gl_PointSize = min(aSize * u_pixelRatio * (600.0 / max(-mv.z, 60.0)), 1100.0);
           }
         `,
         fragmentShader: /* glsl */ `

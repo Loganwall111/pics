@@ -107,11 +107,17 @@ function hintFor(playerState: string, npcName: string | null): string {
 /** 5-slot hotbar (v1.1 §items): mirrors the inventory store, low-frequency. */
 function Hotbar(): React.JSX.Element {
   const slots = useInventoryStore((s) => s.slots);
-  const lastPicked = useInventoryStore((s) => s.lastPicked);
+  const selected = useInventoryStore((s) => s.selected);
+  const select = useInventoryStore((s) => s.select);
   return (
     <div className="hotbar">
       {slots.map((slot, i) => (
-        <div key={i} className={`hotbar-slot ${slot && slot.id === lastPicked ? "active" : ""}`}>
+        <div
+          key={i}
+          className={`hotbar-slot ${i === selected ? "active" : ""}`}
+          onClick={() => select(i)}
+          title="1–5 equip · F shoot · T throw"
+        >
           {slot ? (
             <>
               <span className="hotbar-count">{slot.count}</span>

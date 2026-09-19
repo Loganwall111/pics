@@ -16,6 +16,9 @@ export interface LumitalInput {
   /** One-shot events consumed by App each frame-ish via callbacks. */
   evolveRequested: boolean;
   colonyRequested: boolean;
+  /** Camera toggle (V / F1): third-person ↔ first-person. */
+  firstPerson: boolean;
+  muted: boolean;
 }
 
 export function createLumitalInput(): { input: LumitalInput; dispose: () => void } {
@@ -28,6 +31,8 @@ export function createLumitalInput(): { input: LumitalInput; dispose: () => void
     yaw: Math.PI,
     evolveRequested: false,
     colonyRequested: false,
+    firstPerson: false,
+    muted: false,
   };
 
   const setKey = (code: string, down: boolean): void => {
@@ -56,6 +61,13 @@ export function createLumitalInput(): { input: LumitalInput; dispose: () => void
         break;
       case "KeyB":
         if (down) input.colonyRequested = true;
+        break;
+      case "KeyV":
+      case "F1":
+        if (down) input.firstPerson = !input.firstPerson;
+        break;
+      case "KeyM":
+        if (down) input.muted = !input.muted;
         break;
       default:
         break;

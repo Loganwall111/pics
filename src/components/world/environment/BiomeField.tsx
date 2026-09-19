@@ -15,6 +15,11 @@ import {
 import { aabbFromFootprint } from "@/lib/math/raycast";
 import { RngStream } from "@/lib/math/Random";
 import { biomeCollision } from "./biomeCollision";
+import { photoTexture } from "./photoTextures";
+import grassPhotoUrl from "@/assets/textures/grass.jpg";
+import stoneWallPhotoUrl from "@/assets/textures/stone-wall.jpg";
+import woodPlanksPhotoUrl from "@/assets/textures/wood-planks.jpg";
+import farmSoilPhotoUrl from "@/assets/textures/farm-soil.jpg";
 import { useSettingsStore } from "@/state/stores/settingsStore";
 
 /**
@@ -33,6 +38,27 @@ const GROUND_Y = 0.02; // district ground patches ride just above the asphalt pl
 export function BiomeField(): React.JSX.Element {
   const citySeed = useSettingsStore((s) => s.citySeed);
   const layout = useMemo(() => generateBiomes(citySeed), [citySeed]);
+
+  // Photo-PBR surfaces (v1.1 overhaul): decode is progressive via
+  // TextureLoader; shared across all houses/farms, disposed on unmount.
+  const texs = useMemo(
+    () => ({
+      grass: photoTexture(grassPhotoUrl, 18, 18),
+      stone: photoTexture(stoneWallPhotoUrl, 2.4, 1.4),
+      wood: photoTexture(woodPlanksPhotoUrl, 3, 2),
+      soil: photoTexture(farmSoilPhotoUrl, 14, 14),
+    }),
+    []
+  );
+  useEffect(
+    () => () => {
+      texs.grass.dispose();
+      texs.stone.dispose();
+      texs.wood.dispose();
+      texs.soil.dispose();
+    },
+    [texs]
+  );
 
   // Publish camera collision boxes (house shells).
   useEffect(() => {
@@ -56,10 +82,10 @@ export function BiomeField(): React.JSX.Element {
   return (
     <group>
       {layout.villages.map((v, i) => (
-        <Village key={`v${i}`} v={v} />
+        <Village key={`v${i}`} v={v} texs={texs} />
       ))}
       {layout.farms.map((f, i) => (
-        <Farm key={`f${i}`} f={f} seed={citySeed ^ (0xf00d + i)} />
+        <Farm key={`f${i}`} f={f} seed={citySeed ^ (0xf00d + i)} texs={texs} />
       ))}
       <Lake />
     </group>
@@ -67,7 +93,7 @@ export function BiomeField(): React.JSX.Element {
 }
 
 /** One walk-in house: floor patch, 4 walls (door gap in front), roof, furniture. */
-function House({ h }: { h: HouseSpec }): React.JSX.Element {
+function House({ h, texs }: { h: HouseSpec; texs: HouseTexs }): React.JSX.Element {
   const hw = h.width / 2;
   const hd = h.depth / 2;
   const doorHalf = h.doorWidth / 2;
@@ -85,24 +111,24 @@ function House({ h }: { h: HouseSpec }): React.JSX.Element {
       <RigidBody type="fixed" colliders="cuboid">
         <mesh position={[0, h.wallHeight / 2, -hd]} castShadow>
           <boxGeometry args={[h.width, h.wallHeight, t]} />
-          <meshStandardMaterial color={h.wallColor} roughness={0.9} />
+          <meshStandardMaterial map={texs.stone} color={h.wallColor} roughness={0.9} />
         </mesh>
         <mesh position={[-hw, h.wallHeight / 2, 0]} castShadow>
           <boxGeometry args={[t, h.wallHeight, h.depth]} />
-          <meshStandardMaterial color={h.wallColor} roughness={0.9} />
+          <meshStandardMaterial map={texs.stone} color={h.wallColor} roughness={0.9} />
         </mesh>
         <mesh position={[hw, h.wallHeight / 2, 0]} castShadow>
           <boxGeometry args={[t, h.wallHeight, h.depth]} />
-          <meshStandardMaterial color={h.wallColor} roughness={0.9} />
+          <meshStandardMaterial map={texs.stone} color={h.wallColor} roughness={0.9} />
         </mesh>
         {/* Front wall: two segments flanking the door gap */}
         <mesh position={[-(hw + doorHalf) / 2, h.wallHeight / 2, hd]} castShadow>
           <boxGeometry args={[Math.max(0.1, hw - doorHalf), h.wallHeight, t]} />
-          <meshStandardMaterial color={h.wallColor} roughness={0.9} />
+          <meshStandardMaterial map={texs.stone} color={h.wallColor} roughness={0.9} />
         </mesh>
         <mesh position={[(hw + doorHalf) / 2, h.wallHeight / 2, hd]} castShadow>
           <boxGeometry args={[Math.max(0.1, hw - doorHalf), h.wallHeight, t]} />
-          <meshStandardMaterial color={h.wallColor} roughness={0.9} />
+          <meshStandardMaterial map={texs.stone} color={h.wallColor} roughness={0.9} />
         </mesh>
         {/* Door lintel above the gap */}
         <mesh position={[0, h.wallHeight - 0.3, hd]} castShadow>
@@ -144,7 +170,14 @@ function House({ h }: { h: HouseSpec }): React.JSX.Element {
   );
 }
 
-function Village({ v }: { v: VillageSpec }): React.JSX.Element {
+interface HouseTexs {
+  grass: import("three").Texture;
+  stone: import("three").Texture;
+  wood: import("three").Texture;
+  soil: import("three").Texture;
+}
+
+function Village({ v, texs }: { v: VillageSpec; texs: HouseTexs }): React.JSX.Element {
   const wellRoof = useRef<Group>(null);
   useFrame((_, delta) => {
     if (wellRoof.current) wellRoof.current.rotation.y += delta * 0.15;
@@ -154,7 +187,7 @@ function Village({ v }: { v: VillageSpec }): React.JSX.Element {
       {/* Village dirt ground patch */}
       <mesh position={[v.cx, GROUND_Y, v.cz]} rotation={[-Math.PI / 2, 0, 0]}>
         <circleGeometry args={[64, 28]} />
-        <meshStandardMaterial color="#7d7057" roughness={0.97} />
+        <meshStandardMaterial map={texs.grass} color="#c8d2b8" roughness={0.95} />
       </mesh>
       {/* Central well */}
       <group position={[v.cx, 0, v.cz]}>
@@ -176,14 +209,14 @@ function Village({ v }: { v: VillageSpec }): React.JSX.Element {
         ))}
       </group>
       {v.houses.map((h, i) => (
-        <House key={i} h={h} />
+        <House key={i} h={h} texs={texs} />
       ))}
     </group>
   );
 }
 
 /** Farm plot: dirt patch, crop rows (instanced), walk-in barn, silo, fences, windmill. */
-function Farm({ f, seed }: { f: FarmSpec; seed: number }): React.JSX.Element {
+function Farm({ f, seed, texs }: { f: FarmSpec; seed: number; texs: HouseTexs }): React.JSX.Element {
   const bladesRef = useRef<Group>(null);
   const cropCount = Math.floor((f.width * f.depth) / 6);
   const cropGeo = useMemo(
@@ -249,7 +282,7 @@ function Farm({ f, seed }: { f: FarmSpec; seed: number }): React.JSX.Element {
     <group position={[f.cx, 0, f.cz]} rotation={[0, f.rotation, 0]}>
       <mesh position={[0, GROUND_Y, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <circleGeometry args={[fieldR * 0.72, 24]} />
-        <meshStandardMaterial color="#6b5c42" roughness={0.98} />
+        <meshStandardMaterial map={texs.soil} color="#b8a288" roughness={0.98} />
       </mesh>
       <instancedMesh ref={cropRef} args={[cropGeo, cropMat, cropCount]} frustumCulled={false} />
 
@@ -258,15 +291,15 @@ function Farm({ f, seed }: { f: FarmSpec; seed: number }): React.JSX.Element {
         <RigidBody type="fixed" colliders="cuboid">
           <mesh position={[-3.4, 2.4, 0]} castShadow>
             <boxGeometry args={[3.2, 4.8, 7]} />
-            <meshStandardMaterial color="#96372c" roughness={0.9} />
+            <meshStandardMaterial map={texs.wood} color="#c98a72" roughness={0.9} />
           </mesh>
           <mesh position={[3.4, 2.4, 0]} castShadow>
             <boxGeometry args={[3.2, 4.8, 7]} />
-            <meshStandardMaterial color="#96372c" roughness={0.9} />
+            <meshStandardMaterial map={texs.wood} color="#c98a72" roughness={0.9} />
           </mesh>
           <mesh position={[0, 2.4, -3.4]} castShadow>
             <boxGeometry args={[10, 4.8, 0.3]} />
-            <meshStandardMaterial color="#7c2d24" roughness={0.9} />
+            <meshStandardMaterial map={texs.wood} color="#a86a54" roughness={0.9} />
           </mesh>
         </RigidBody>
         <mesh position={[0, 6.1, 0]} rotation={[0, Math.PI / 4, 0]} castShadow>

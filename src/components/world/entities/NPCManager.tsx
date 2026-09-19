@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
-import { Group, MeshStandardMaterial, SphereGeometry, CapsuleGeometry } from "three";
+import { CanvasTexture, Group, MeshStandardMaterial, SphereGeometry, CapsuleGeometry, RepeatWrapping } from "three";
 import { SpatialHash } from "@/engine/spatial/SpatialHash";
 import { RngStream } from "@/lib/math/Random";
 import { createWanderer, stepWander, type Wanderer } from "@/lib/math/wander";
@@ -31,7 +31,31 @@ export function NPCManager(): React.JSX.Element {
   const shared = useMemo(() => {
     const bodyGeometry = new CapsuleGeometry(0.32, 0.7, 6, 12);
     const headGeometry = new SphereGeometry(0.26, 12, 10);
-    const baseMaterial = new MeshStandardMaterial({ color: 0x3a4658, roughness: 0.6, metalness: 0.2 });
+
+    // Woven fabric texture (procedural canvas): the torsos read as cloth,
+    // not raw shaded capsules.
+    const cv = document.createElement("canvas");
+    cv.width = 64;
+    cv.height = 64;
+    const ctx = cv.getContext("2d");
+    if (!ctx) throw new Error("npc: canvas unavailable");
+    ctx.fillStyle = "#b9c2d0";
+    ctx.fillRect(0, 0, 64, 64);
+    for (let y = 0; y < 64; y += 4) {
+      ctx.fillStyle = y % 8 === 0 ? "rgba(0,0,0,0.10)" : "rgba(255,255,255,0.08)";
+      ctx.fillRect(0, y, 64, 2);
+    }
+    for (let x = 0; x < 64; x += 4) {
+      ctx.fillStyle = x % 8 === 0 ? "rgba(0,0,0,0.06)" : "rgba(255,255,255,0.05)";
+      ctx.fillRect(x, 0, 2, 64);
+    }
+    const fabric = new CanvasTexture(cv);
+    fabric.wrapS = RepeatWrapping;
+    fabric.wrapT = RepeatWrapping;
+    fabric.repeat.set(3, 3);
+
+    const baseMaterial = new MeshStandardMaterial({ map: fabric, color: 0x8fa0b8, roughness: 0.85, metalness: 0 });
+    const headMaterial = new MeshStandardMaterial({ color: 0xdcae94, roughness: 0.6, metalness: 0 });
     const accentMaterials = NPC_ROSTER.map(
       (npc) =>
         new MeshStandardMaterial({
@@ -41,7 +65,7 @@ export function NPCManager(): React.JSX.Element {
           roughness: 0.4,
         })
     );
-    return { bodyGeometry, headGeometry, baseMaterial, accentMaterials };
+    return { bodyGeometry, headGeometry, baseMaterial, headMaterial, accentMaterials, fabric };
   }, []);
 
   // Proximity index over anchor positions (positions padded by the wander
@@ -73,6 +97,8 @@ export function NPCManager(): React.JSX.Element {
       shared.bodyGeometry.dispose();
       shared.headGeometry.dispose();
       shared.baseMaterial.dispose();
+      shared.headMaterial.dispose();
+      shared.fabric.dispose();
       for (const m of shared.accentMaterials) m.dispose();
     };
   }, [shared]);
@@ -164,7 +190,7 @@ export function NPCManager(): React.JSX.Element {
           }}
         >
           <mesh geometry={shared.bodyGeometry} material={shared.baseMaterial} castShadow position={[0, 0.75, 0]} />
-          <mesh geometry={shared.headGeometry} material={shared.baseMaterial} castShadow position={[0, 1.5, 0]} />
+          <mesh geometry={shared.headGeometry} material={shared.headMaterial} castShadow position={[0, 1.5, 0]} />
           {/* Accent halo ring + chest core */}
           <mesh material={shared.accentMaterials[i]} position={[0, 1.06, 0.22]}>
             <boxGeometry args={[0.16, 0.16, 0.05]} />

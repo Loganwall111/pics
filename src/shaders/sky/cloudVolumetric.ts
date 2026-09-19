@@ -82,7 +82,9 @@ void main() {
   if (span <= 0.0) discard;
 
   float dt = span / u_steps;
-  float jitter = hash21(gl_FragCoord.xy + fract(u_time) * 100.0) * dt;
+  // Stable per-pixel jitter: animating this term caused full-sky shimmer
+  // (reported as constant flashing). Static noise + dense steps = calm.
+  float jitter = hash21(gl_FragCoord.xy) * dt;
   float acc = 0.0;
   vec3 lightAccum = vec3(0.0);
 
@@ -104,8 +106,11 @@ void main() {
   }
 
   float alpha = clamp(acc, 0.0, 0.98);
-  // Distance fade blends the slab into sky haze at the horizon.
+  // Distance fade blends the slab into sky haze at the horizon, AND fades
+  // to zero at the cover-box silhouette (the old exp-only fade left a hard
+  // visible edge line where the box met the sky).
   alpha *= exp(-tMin * 0.00045);
+  alpha *= 1.0 - smoothstep(2800.0, 4300.0, tMin);
   if (alpha < 0.004) discard;
   vec3 meanCol = lightAccum / max(alpha, 0.001);
   gl_FragColor = vec4(meanCol, alpha);

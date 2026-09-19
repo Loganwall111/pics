@@ -12,7 +12,7 @@ import { RngStream } from "../../../src/lib/math/Random";
 
 import type { WorldId } from "./worlds";
 
-export const SPECIES_COUNT = 108;
+export const SPECIES_COUNT = 120;
 
 export interface BodyPlan {
   bodyLength: number; // 0.5..1.6

@@ -14,9 +14,9 @@ describe("getSpecies", () => {
     expect(names.size).toBe(SPECIES_COUNT);
   });
 
-  it("catalog is exactly 108 species", () => {
-    expect(SPECIES_COUNT).toBe(108);
-    expect(SPECIES_CATALOG.length).toBe(108);
+  it("catalog is exactly 120 species", () => {
+    expect(SPECIES_COUNT).toBe(120);
+    expect(SPECIES_CATALOG.length).toBe(120);
   });
 
   it("body plans stay in visual bounds", () => {

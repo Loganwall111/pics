@@ -69,6 +69,16 @@ export function removeFirst(slots: (Slot | null)[]): ItemId | null {
   return null;
 }
 
+/** Remove one from a specific slot (the equipped one). Returns id or null. */
+export function removeAt(slots: (Slot | null)[], index: number): ItemId | null {
+  const slot = slots[index];
+  if (!slot) return null;
+  const id = slot.id;
+  slot.count -= 1;
+  if (slot.count <= 0) slots[index] = null;
+  return id;
+}
+
 export interface PickupSpot {
   x: number;
   z: number;
@@ -95,6 +105,7 @@ export function scatterPickups(seed: number): PickupSpot[] {
   const villages = [
     { cx: 0, cz: -420 },
     { cx: 420, cz: 60 },
+    { cx: -420, cz: 30 },
   ];
   for (const v of villages) {
     for (let i = 0; i < 4; i++) {

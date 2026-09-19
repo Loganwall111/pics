@@ -6,6 +6,7 @@ import { createLumitalInput } from "./game/input";
 import { journeyReducer, type JourneyState } from "./game/journey";
 import { buyTrait, type TraitId } from "./game/traits";
 import { nextWorld } from "./game/worlds";
+import { lumitalAudio } from "./game/audio";
 import "./styles.css";
 
 /**
@@ -55,9 +56,11 @@ export function App(): React.JSX.Element {
         input.evolveRequested = false;
         setEvolveOpen((v) => !v);
       }
+      if (input.muted !== lumitalAudio.muted) lumitalAudio.setMuted(input.muted);
       if (input.colonyRequested) {
         input.colonyRequested = false;
         if (!evolveOpen && journey.colonies < 5) {
+          lumitalAudio.colony();
           // Colony at the creature's current spot (approximated by last cam
           // focus — the input module tracks yaw; the canvas reports position
           // via colony placement callback below).
@@ -73,6 +76,8 @@ export function App(): React.JSX.Element {
     return (
       <MainMenu
         onStart={(speciesIndex) => {
+          lumitalAudio.resume(); // user gesture — audio wakes here
+          lumitalAudio.setMuted(inputRef.current?.input.muted ?? false);
           coloniesRef.current = [];
           dnaSpentRef.current = 0;
           dispatch({ type: "start", speciesIndex });
@@ -90,6 +95,8 @@ export function App(): React.JSX.Element {
     yaw: Math.PI,
     evolveRequested: false,
     colonyRequested: false,
+    firstPerson: false,
+    muted: false,
   };
 
   const handleBuy = (id: TraitId): void => {
@@ -105,8 +112,14 @@ export function App(): React.JSX.Element {
       <GameCanvas
         journey={journey}
         input={input}
-        onPortal={() => dispatch({ type: "portal", next: nextWorld(journey.world), bonus: 30 })}
-        onCollect={() => dispatch({ type: "collect", amount: 8 })}
+        onPortal={() => {
+          lumitalAudio.portal();
+          dispatch({ type: "portal", next: nextWorld(journey.world), bonus: 30 });
+        }}
+        onCollect={() => {
+          lumitalAudio.pickup();
+          dispatch({ type: "collect", amount: 8 });
+        }}
         colonies={coloniesRef.current}
       />
       <Hud

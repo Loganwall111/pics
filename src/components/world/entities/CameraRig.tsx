@@ -194,7 +194,9 @@ export function CameraRig(): null {
       }
     }
 
-    const lambda = store.playerState === "flying" ? 3.2 : 7.5;
+    // Snappier on-foot follow: the old λ=7.5 lagged far enough behind turns
+    // to feel like the camera was still moving after the player stopped.
+    const lambda = store.playerState === "flying" ? 3.4 : store.playerState === "driving" ? 9.5 : 13;
     state.pos.x = damp(state.pos.x, state.desired.x, lambda, dt);
     state.pos.y = damp(state.pos.y, state.desired.y, lambda, dt);
     state.pos.z = damp(state.pos.z, state.desired.z, lambda, dt);

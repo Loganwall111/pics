@@ -34,9 +34,14 @@ export enum SimAction {
   Punch = 26,
   ThrowItem = 27,
   Shoot = 28,
+  Slot1 = 29,
+  Slot2 = 30,
+  Slot3 = 31,
+  Slot4 = 32,
+  Slot5 = 33,
 }
 
-export const SIM_ACTION_COUNT = 29;
+export const SIM_ACTION_COUNT = 34;
 
 /**
  * Physical key (KeyboardEvent.code) → semantic actions.

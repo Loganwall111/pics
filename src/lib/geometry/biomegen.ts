@@ -62,6 +62,7 @@ export function generateBiomes(seed: number): BiomeLayout {
   const villages: VillageSpec[] = [
     makeVillage(rng, 0, -VILLAGE_DIST, "Northgate"),
     makeVillage(rng, VILLAGE_DIST, 60, "Easthollow"),
+    makeVillage(rng, -VILLAGE_DIST, 30, "Westbrook"),
   ];
 
   const farms: FarmSpec[] = [];
@@ -91,7 +92,7 @@ export function generateBiomes(seed: number): BiomeLayout {
 
 function makeVillage(rng: RngStream, cx: number, cz: number, name: string): VillageSpec {
   const houses: HouseSpec[] = [];
-  const count = 6;
+  const count = 7;
   for (let i = 0; i < count; i++) {
     const ang = (i / count) * Math.PI * 2 + rng.range(-0.25, 0.25);
     const dist = 26 + rng.range(-6, 10);

@@ -3,6 +3,7 @@ import { useSimulationStore } from "@/state/stores/simulationStore";
 import { getNpcDefinition, getScript } from "@/components/world/entities/npcDefinitions";
 import { getEntry } from "@/lib/simulation/DialogueEngine";
 import { frameState } from "@/state/transient/frameState";
+import { audio } from "@/engine/audio/AudioSystem";
 
 /**
  * Dialogue UI (§18).
@@ -42,11 +43,17 @@ export function DialogueOverlay(): React.JSX.Element | null {
     if (!dialogue.active || !entry) return;
     let raf = 0;
     let last = performance.now();
+    let lastSpokeAt = 0;
     const step = (now: number): void => {
       const dt = (now - last) / 1000;
       last = now;
       revealedRef.current = Math.min(fullText.length, revealedRef.current + dt * CHARS_PER_SECOND);
       const n = Math.floor(revealedRef.current);
+      // Villager voice: a gibberish chirp roughly every 4th character.
+      if (n - lastSpokeAt >= 4 && fullText[n - 1] !== " ") {
+        lastSpokeAt = n;
+        audio.speech();
+      }
       setRevealed((prev) => (prev === n ? prev : n));
       if (textRef.current) textRef.current.textContent = fullText.slice(0, n);
       frameState.dialogueTyping = n < fullText.length;

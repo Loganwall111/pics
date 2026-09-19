@@ -73,7 +73,11 @@ Modes: `1` Metropolis · `2` Low-Gravity (0.165 g, alien turquoise sky) · `3` O
 
 - **Main menu**: the sim boots into a full-screen menu with the live city running a cinematic drone orbit behind it. ENTER CITY (or a mode row) drops you straight in — no reload.
 - **The world continues past the skyline**: two walk-in **villages** (real doorways, furnished rooms, rapier wall colliders), eight **farm plots** (wheat/corn/pumpkin rows, barns you can enter, silos, turning windmills), and a **reflective lake** with real planar reflections.
-- **Items & combat**: seeded pickups (E) fill a 5-slot hotbar; `Q` punches (NPCs flee), `F` fires a hitscan beam, `T` throws held items as physics balls.
+- **Items & combat**: seeded pickups (E) fill a 5-slot hotbar — **click a slot to equip it**; `Q` punches (NPCs flee), `F` fires a beam in the equipped item's color, `T` throws the equipped item as a physics ball.
+- **Texture overhaul (v1.1)**: AI photo textures on districts — grass meadows under the villages, stone-masonry cottage walls, plank barns, tilled farm soil (6 photo textures total across the game).
+- **People**: villagers wear procedural woven-fabric clothing with skin tones, and they **speak** — gibberish voice chirps while dialogue types out.
+- **Three villages** now ring the city (Northgate, Easthollow, Westbrook), 7 houses each.
+- **Feel fixes**: strafe direction corrected (A/D were swapped), chase camera follow tightened (no more lag drift), and the volumetric cloud shader de-shimmered (stable jitter + horizon edge fade — no more flashing sky lines).
 
 ## Weather, audio & persistence (v1.0)
 

@@ -19,9 +19,9 @@ describe("generateBiomes", () => {
 
   it("places 2 villages with 6 houses each, clear of the city", () => {
     const b = generateBiomes(1337);
-    expect(b.villages.length).toBe(2);
+    expect(b.villages.length).toBe(3);
     for (const v of b.villages) {
-      expect(v.houses.length).toBe(6);
+      expect(v.houses.length).toBe(7);
       for (const h of v.houses) {
         expect(Math.hypot(h.x, h.z)).toBeGreaterThan(CITY_RADIUS + 100);
       }
@@ -61,7 +61,7 @@ describe("generateBiomes", () => {
   it("camera boxes wrap the houses", () => {
     const b = generateBiomes(1337);
     const boxes = villageCameraBoxes(b.villages);
-    expect(boxes.length).toBe(12);
+    expect(boxes.length).toBe(21);
     const first = b.villages[0]?.houses[0];
     const box = boxes[0];
     if (first && box) {

@@ -208,7 +208,8 @@ export function Player(): React.JSX.Element {
     // Camera-relative movement basis (yaw only).
     const yaw = playerShared.camYaw;
     tmp.forward.set(Math.sin(yaw), 0, Math.cos(yaw));
-    tmp.right.set(tmp.forward.z, 0, -tmp.forward.x);
+    // Screen-right = forward × up (negating this made A/D feel swapped).
+    tmp.right.set(-tmp.forward.z, 0, tmp.forward.x);
 
     const axisX = locked ? 0 : input.moveX;
     const axisY = locked ? 0 : input.moveY;
