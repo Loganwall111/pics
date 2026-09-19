@@ -1,16 +1,23 @@
 import { useEffect, useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import {
+  BoxGeometry,
   BufferAttribute,
   BufferGeometry,
   CanvasTexture,
   Color,
   DoubleSide,
+  Mesh,
   NormalBlending,
   Points,
   ShaderMaterial,
   Vector3,
 } from "three";
+import {
+  CLOUD_VOLUMETRIC_FRAGMENT,
+  CLOUD_VOLUMETRIC_VERTEX,
+  makeCloudVolumetricUniformRefs,
+} from "@/shaders/sky/cloudVolumetric";
 import { frameState } from "@/state/transient/frameState";
 import { getQualityProfile } from "@/engine/rendering/quality";
 import { useSettingsStore } from "@/state/stores/settingsStore";
@@ -18,16 +25,16 @@ import { selectQuality } from "@/state/selectors";
 import { RngStream } from "@/lib/math/Random";
 
 /**
- * Volumetric-look cloud layer (§33 weather groundwork).
+ * Cloud layer (§33 weather) — two techniques, tier-switched:
  *
- * Technique (documented honestly): layered soft-particle billboards — a
- * seeded field of camera-facing cloud puffs rendered as gl_Points with a
- * procedural multi-blob alpha sprite, drift in the vertex shader, and
- * sun-tinted shading on the CPU. Raymarched volumetrics are the upgrade
- * path; this achieves the parallax/scattering READ at a fixed few-draw-call
- * cost and is bounded by the quality-tier particle budget.
+ * - medium and above: RAYMARCHED volumetric slab (cloudVolumetric.ts) — an
+ *   analytic ray/slab march through a wind-advected noise field with sun
+ *   occlusion sampling; march budget = profile.volumetricSamples.
+ * - low: layered soft-particle billboards (the original few-draw-call
+ *   fallback), bounded by the particle budget.
  *
- * Cleanup: sprite texture + geometry + material disposed on unmount (§22).
+ * Both paths are weather-coupled per frame (coverage, tint, opacity) and
+ * dispose all GPU resources on unmount (§22).
  */
 
 const SIZE = 512;
@@ -57,9 +64,74 @@ function makeCloudTexture(): import("three").Texture {
   return tex;
 }
 
-export function CloudLayer(): React.JSX.Element | null {
-  const quality = useSettingsStore(selectQuality);
-  const profile = getQualityProfile(quality);
+const CLOUD_BASE = 320;
+const CLOUD_THICKNESS = 160;
+
+/** Raymarched slab path (medium+ tiers). */
+function RaymarchedClouds(): React.JSX.Element {
+  const profile = getQualityProfile(useSettingsStore(selectQuality));
+  const meshRef = useRef<Mesh>(null);
+
+  const geometry = useMemo(() => new BoxGeometry(9000, CLOUD_THICKNESS, 9000), []);
+  const uniforms = useMemo(() => makeCloudVolumetricUniformRefs(), []);
+  const material = useMemo(
+    () =>
+      new ShaderMaterial({
+        vertexShader: CLOUD_VOLUMETRIC_VERTEX,
+        fragmentShader: CLOUD_VOLUMETRIC_FRAGMENT,
+        uniforms: uniforms as unknown as Record<string, { value: unknown }>,
+        transparent: true,
+        depthWrite: false,
+        side: DoubleSide,
+      }),
+    [uniforms]
+  );
+
+  useEffect(() => {
+    uniforms.u_baseHeight.value = CLOUD_BASE;
+    uniforms.u_thickness.value = CLOUD_THICKNESS;
+    uniforms.u_steps.value = profile.volumetricSamples;
+    return () => {
+      geometry.dispose();
+      material.dispose();
+    };
+  }, [geometry, material, uniforms, profile]);
+
+  const tint = useMemo(() => new Color(), []);
+  const sky = useMemo(() => new Color(), []);
+  const NIGHT = useMemo(() => new Color(0.06, 0.08, 0.13), []);
+  const GREY = useMemo(() => new Color(0.32, 0.34, 0.38), []);
+
+  useFrame(({ camera: cam }) => {
+    const weather = frameState.weather;
+    uniforms.u_time.value = frameState.clock.shaderTimeSeconds;
+    uniforms.u_coverage.value = weather.cloudiness;
+    uniforms.u_density.value = 0.55 + 0.55 * weather.cloudiness;
+    uniforms.u_wind.value.set(4 + weather.windStrength * 9, 1.2 + weather.windStrength * 4);
+    // Sun scattering tint: warm daylight, dim blue at night, grey under load.
+    tint.copy(frameState.sunColor).multiplyScalar(0.25 + 0.75 * frameState.sunIntensity * 0.34);
+    tint.lerp(NIGHT, frameState.nightFactor);
+    tint.lerp(GREY, weather.cloudiness * 0.5);
+    uniforms.u_sunColor.value.copy(tint);
+    sky.copy(frameState.zenithColor).lerp(GREY, weather.cloudiness * 0.6);
+    uniforms.u_skyColor.value.copy(sky);
+    uniforms.u_sunDirection.value.copy(frameState.sunDirection);
+    // Follow the viewer in large steps (sky feels infinite, cheap).
+    meshRef.current?.position.set(
+      Math.round(cam.position.x / 1200) * 1200,
+      CLOUD_BASE + CLOUD_THICKNESS / 2,
+      Math.round(cam.position.z / 1200) * 1200
+    );
+  });
+
+  return (
+    <mesh ref={meshRef} geometry={geometry} material={material} frustumCulled={false} renderOrder={-5} />
+  );
+}
+
+/** Soft-particle fallback path (low tier). */
+function ParticleClouds(): React.JSX.Element {
+  const profile = getQualityProfile(useSettingsStore(selectQuality));
   const pointsRef = useRef<Points>(null);
 
   const count = Math.floor(profile.particleBudget * 0.05); // 80–210 puffs
@@ -149,14 +221,16 @@ export function CloudLayer(): React.JSX.Element | null {
 
   const tint = useMemo(() => new Color(), []);
   const camPos = useMemo(() => new Vector3(), []);
+  const NIGHT = useMemo(() => new Color(0.06, 0.08, 0.13), []);
+  const GREY = useMemo(() => new Color(0.32, 0.34, 0.38), []);
 
   useFrame(({ camera: cam }) => {
     material.uniforms.u_globalTime!.value = frameState.clock.shaderTimeSeconds;
     // Sun-side scattering tint: warm at golden hour, dark slate at night,
     // and the coverage thickens with the weather system's cloudiness (§33).
     const night = frameState.nightFactor;
-    tint.copy(frameState.sunColor).lerp(new Color(0.06, 0.08, 0.13), night);
-    tint.lerp(new Color(0.32, 0.34, 0.38), frameState.weather.cloudiness * 0.55);
+    tint.copy(frameState.sunColor).lerp(NIGHT, night);
+    tint.lerp(GREY, frameState.weather.cloudiness * 0.55);
     (material.uniforms.u_tint!.value as Color).copy(tint);
     material.uniforms.u_opacity!.value =
       (0.24 + 0.72 * frameState.weather.cloudiness) * (0.5 + 0.4 * (1 - night));
@@ -170,4 +244,12 @@ export function CloudLayer(): React.JSX.Element | null {
   });
 
   return <points ref={pointsRef} geometry={geometry} material={material} frustumCulled={false} />;
+}
+
+/** Tier switch: raymarched volumetrics on medium+, particle fallback on low. */
+export function CloudLayer(): React.JSX.Element {
+  const quality = useSettingsStore(selectQuality);
+  const profile = getQualityProfile(quality);
+  if (quality !== "low" && profile.volumetricEnabled) return <RaymarchedClouds />;
+  return <ParticleClouds />;
 }

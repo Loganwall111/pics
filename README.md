@@ -44,6 +44,8 @@ Modes: `1` Metropolis · `2` Low-Gravity (0.165 g, alien turquoise sky) · `3` O
 | Orbital mechanics | `lib/orbital/OrbitalMechanics.ts`, `space/SpaceScene.tsx` | per frame (analytic) | real elements↔state, Kepler solver, μ tables |
 | Floating origin | `engine/simulation/FloatingOrigin.ts` + `RebaseProbe` | per frame past 4096 u | float64 sim space, float32-safe render space |
 | Sky | `shaders/sky/skyShader.ts`, `celestial/SkyDome.tsx`, `engine/simulation/TimeOfDay.ts` | uniforms per frame | Rayleigh/Mie approx, contract uniform model (§11) |
+| Volumetric clouds | `shaders/sky/cloudVolumetric.ts`, `environment/CloudLayer.tsx` | raymarch per pixel | slab raymarch, wind-advected fBm density, 3-sample sun occlusion; march budget = quality tier (particle fallback on low) |
+| Lightning | `lib/math/bolt.ts`, `effects/LightningBolt.tsx` | on strike | deterministic jagged polyline (tested) near the viewer, additive, opacity rides the strike envelope |
 | Volumetrics | `effects/PostFX.tsx`, `celestial/SunMesh.tsx` | per frame | GodRaysEffect with real occluding sun mesh (§12) |
 | City | `lib/geometry/citygen.ts`, `textures.ts`, `buildings/City.tsx`, `environment/Ground.tsx` | on seed/quality | InstancedMesh + shader windows (§13–§15), seeded |
 | Particles | `effects/AmbientParticles.tsx`, `ExhaustParticles.tsx`, `shaders/effects/*` | GPU drift / pooled CPU | bounded budgets (§21) |
@@ -65,6 +67,7 @@ Modes: `1` Metropolis · `2` Low-Gravity (0.165 g, alien turquoise sky) · `3` O
 - **Audio** synthesizes everything at runtime (no audio files): filtered pink noise for wind and rain, a two-oscillator engine voice mapped from speed/boost/flight, thunder on lightning strikes, and UI blips. `M` mutes; the SYSTEMS panel has an audio toggle.
 - **Persistence**: quality, seed, time-of-day, mute, and your home spawn point (saved as you explore) survive reloads. Spawning returns you to your last home.
 - **Ambient life**: seeded dogs and pedestrians walk the city with velocity-synced gaits; pedestrians follow shared, unit-tested sidewalk circuits. **AI traffic** drives the road grid with right-hand lanes, rain-slowed speeds and headlights that respond to darkness and storms; **bird flocks** circle the skyline and land while it pours. The chase camera now collides with buildings (ray-vs-AABB clamped boom).
+- **Storms are a show**: raymarched volumetric clouds build and darken with the weather cycle; lightning bolts strike visibly near the viewer (deterministic jagged geometry, opacity rides the strike envelope) synced with the thunder audio and sun flash; street lamps and car headlights ignite in rain and darkness.
 
 ## Validation results (executed, not claimed)
 
@@ -81,9 +84,9 @@ Modes: `1` Metropolis · `2` Low-Gravity (0.165 g, alien turquoise sky) · `3` O
 
 ## Known limitations
 
-- GodRays/Bloom require a quality tier ≥ medium (LOW disables the composer by design).
+- GodRays/Bloom and raymarched clouds require a quality tier ≥ medium (LOW falls back to particle clouds and disables the composer by design).
 - Circular-orbit (e ≈ 0) element roundtrips are excluded from tests: ω is mathematically degenerate there (covered by a dedicated circular identity test instead).
-- Clouds are layered soft-particle volumetrics (raymarched upgrade documented). Dogs, pedestrians and traffic are visual-only (no physics bodies) — by design, to keep the 16.6 ms budget on the player and hero vehicle. Street wetness/puddles are a shading model, not a water simulation.
+- Clouds are a raymarched analytic slab (fBm density field) — beautiful but not a full 3D fluid simulation. Dogs, pedestrians and traffic are visual-only (no physics bodies) — by design, to keep the 16.6 ms budget on the player and hero vehicle. Street wetness/puddles are a shading model, not a water simulation.
 - Dialogue NPCs stroll within ~3 m of their anchor (reachable + framed correctly in dialogue) rather than roaming the whole city.
 - Planetary radii are visually exaggerated ×3; orbital time is compressed ×260 (both documented in `SpaceScene.tsx`); ship physics itself is unscaled Newtonian.
 - StrictMode is intentionally off (double-mounted WebGL/physics boot cost); effects are written idempotent regardless.

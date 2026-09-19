@@ -112,3 +112,24 @@ No new art assets — everything below is procedural and code-authored.
   per frame (Kay–Kajiya slab test, allocation-free) and pulls in to the hit minus a
   0.5 m skin (1.4 m minimum boom). Unit-tested: hits, misses, nearest-of-several,
   behind-ray, origin-inside, maxDist sentinel.
+
+## Raymarched clouds + lightning strikes (atmosphere pass, v1.0)
+
+No new art assets — shader + procedural geometry.
+
+- **Volumetric clouds** (`src/shaders/sky/cloudVolumetric.ts`, mounted in
+  `CloudLayer.tsx`): analytic ray/slab intersection against
+  [320 u, 480 u]; density = 3-octave value-noise fBm (0.55/0.28/0.17),
+  wind-advected (`u_wind` from `weather.windStrength`), rounded vertical
+  profile; coverage remap smoothstep(0.74→0.30) driven by `weather.cloudiness`.
+  Lighting = 3-sample sun occlusion (exp falloff) + vertical gradient +
+  sky ambient; front-to-back alpha with jittered start (banding suppress).
+  March budget = `profile.volumetricSamples` (24/40/64; march span capped
+  2600 u, horizon alpha fade `exp(-t·0.00045)`). Low tier keeps the
+  soft-particle path.
+- **Lightning bolts** (`src/lib/math/bolt.ts` + `effects/LightningBolt.tsx`):
+  rising edge of `weather.lightning` (> 0.35, 1.4 s cooldown) spawns a bolt
+  320–760 u from the camera: 16 damped-jitter main segments + up to 3 branch
+  spurs, deterministic per strike seed, written into one reused buffer
+  (unit-tested: determinism, per-segment descent, landing tolerance,
+  capacity, loud errors). Additive line segments; opacity = strike envelope.

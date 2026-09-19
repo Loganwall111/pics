@@ -264,7 +264,9 @@ export function City(): React.JSX.Element {
     sky.r = frameState.zenithColor.r * day;
     sky.g = frameState.zenithColor.g * day;
     sky.b = frameState.zenithColor.b * day;
-    headMaterial.color.copy(headColor).multiplyScalar(0.25 + 1.5 * frameState.nightFactor);
+    headMaterial.color
+          .copy(headColor)
+          .multiplyScalar(0.25 + 1.5 * Math.max(frameState.nightFactor, frameState.weather.rain * 0.9));
   });
 
   return (

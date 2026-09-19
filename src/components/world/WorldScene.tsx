@@ -23,6 +23,7 @@ import { NPCManager, npcShared } from "./entities/NPCManager";
 import { Dogs } from "./entities/Dogs";
 import { Pedestrians } from "./entities/Pedestrians";
 import { Traffic } from "./entities/Traffic";
+import { LightningBolt } from "./effects/LightningBolt";
 import { Birds } from "./entities/Birds";
 import { InteractionSystem } from "./entities/InteractionSystem";
 import { AmbientParticles } from "./effects/AmbientParticles";
@@ -158,6 +159,7 @@ export function WorldScene(): React.JSX.Element {
       <Pedestrians />
       <Traffic />
       <Birds />
+      <LightningBolt />
 
       <CameraRig />
       <InteractionSystem />
