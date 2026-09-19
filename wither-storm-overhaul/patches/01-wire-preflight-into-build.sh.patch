@@ -1,0 +1,56 @@
+diff --git a/ci/build.sh b/ci/build.sh
+index aaac85b..fa9b07f 100644
+--- a/ci/build.sh
++++ b/ci/build.sh
+@@ -1238,6 +1238,51 @@ N_SOURCES="$(printf '%s\n' "$SOURCES" | grep -c . || true)"
+ # bound javac's heap so a cgroup limit produces a real OutOfMemoryError with a
+ # stack instead of a silent SIGKILL, and keep the last lines of javac's own log
+ # in the captured evidence.
++# ---------------------------------------------------------------------------
++# PREFLIGHT GATE -- ci/preflight.py, run BEFORE javac spends a runner.
++#
++# 43 of the 152 build runs recorded in ci-out/ died at javac
++# (ci-out/run-*/JAVAC_FAILED.txt). Their errors cluster into a handful of
++# mechanical classes that are readable from the text without a compiler:
++#
++#     134  cannot find symbol            (unused-import, api-drift note)
++#      33  incompatible types            (lossy-float)
++#      17  lambda capture not final      (lambda-capture)
++#       4  duplicate local variable      (dup-local)
++#
++# Every one of those cost a full push -> runner -> red cycle, in a sandbox with
++# no JDK to test against first.
++#
++# ci/check_java_balance.py was written for exactly this job and is good code --
++# but grepping build.sh for it returns nothing, so it has never once stopped a
++# build. That check is now folded into ci/preflight.py and this is where it,
++# and the rest of the classes, actually run.
++#
++# BLOCKING rules are the ones whose finding is a guaranteed javac error.
++# Advisory rules (unused imports; symbols the javap dump cannot see through
++# inheritance) print but never fail -- a gate that cries wolf gets deleted, and
++# then it protects nothing. Set MCSM_PREFLIGHT_STRICT=1 for release builds, or
++# MCSM_PREFLIGHT=skip to stand it down entirely.
++# ---------------------------------------------------------------------------
++if [ "${MCSM_PREFLIGHT:-run}" != "skip" ] && [ -f ci/preflight.py ]; then
++  PREFLIGHT_ARGS="--root ."
++  [ "${MCSM_PREFLIGHT_STRICT:-0}" = "1" ] && PREFLIGHT_ARGS="$PREFLIGHT_ARGS --strict"
++  echo "[preflight] ${N_SOURCES} sources..."
++  set +e
++  python3 ci/preflight.py $SOURCES $PREFLIGHT_ARGS > /tmp/mcsm-preflight.txt 2>&1
++  PREFLIGHT_RC=$?
++  set -e
++  tail -25 /tmp/mcsm-preflight.txt || true
++  if [ "$PREFLIGHT_RC" -ne 0 ]; then
++    echo "[preflight] BLOCKING finding(s) -- javac would fail on these."
++    echo "[preflight] full report: /tmp/mcsm-preflight.txt (copied to out/)"
++    mkdir -p out && cp -f /tmp/mcsm-preflight.txt out/PREFLIGHT_FAILED.txt 2>/dev/null || true
++    exit 1
++  fi
++else
++  echo "[preflight] skipped (MCSM_PREFLIGHT=${MCSM_PREFLIGHT:-unset}, or ci/preflight.py absent)"
++fi
++
+ echo "[javac] ${N_SOURCES} sources, ${FAPI2_COUNT} fabric modules"
+ echo "[javac] memory before: $(free -m 2>/dev/null | awk '/^Mem:/ {print $3" used / "$2" MB"}')"
+ echo "[javac] /tmp free: $(df -h /tmp 2>/dev/null | awk 'NR==2 {print $4}')"

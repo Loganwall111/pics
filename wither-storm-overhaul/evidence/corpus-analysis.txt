@@ -1,0 +1,36 @@
+BUILD-FAILURE CORPUS ANALYSIS
+source: ci-out/run-*/JAVAC_FAILED.txt on arena/01a0b039-lowuuuuuu (2026-09-19)
+records: 152 build runs, 43 with javac failures
+
+ERROR CLASSES
+    134 cannot find symbol
+     33 incompatible types
+     32 method vertex in class 
+     22 package net
+     17 local variables referenced from a lambda expression must be final or effectively final
+      9 constructor 
+      6 random has protected access in 
+      5 cannot access 
+      4 variable z
+      4 variable y
+      3 no suitable method found for play
+      3 items has private access in 
+      2 variable beast is already defined in method flying
+      2 package com
+      2 package 
+      1 method below in class 
+      1 class
+
+TOP UNRESOLVED SYMBOLS
+      9 symbol: variable ClientPlayNetworking
+      9 symbol: method getDescriptionId()
+      8 symbol: method smoothstep(float,float,float)
+      8 symbol: method getSharedSpawnPos()
+      7 symbol: variable WHITE_CONCRETE
+      7 symbol: method getTimeOfDay(float)
+      3 symbol: variable voidMerged
+      3 symbol: variable ServerPlayNetworking
+      3 symbol: variable PayloadTypeRegistry
+      3 symbol: variable McsmTerminal
+      3 symbol: variable McsmSkyVortexes
+      3 symbol: variable BLACK_CONCRETE

@@ -1,0 +1,32 @@
+PREFLIGHT ON THE LIVE TREE (220 compiled sources)
+run: python3 ci/preflight.py --roots
+
+note         mcsm-extras/java/net/mcsm/extras/entity/StoryCharacterEntity.java:57
+             'PathfinderMob.createMobAttributes' is not declared in the dump for net.minecraft.world.entity.PathfinderMob -- it may be inherited (fine) or renamed (a javac error). Verify before pushing.
+                     | return PathfinderMob.createMobAttributes()
+note         mcsm-extras/java/net/mcsm/extras/entity/VoidDwellerEntity.java:78
+             'PathfinderMob.createMobAttributes' is not declared in the dump for net.minecraft.world.entity.PathfinderMob -- it may be inherited (fine) or renamed (a javac error). Verify before pushing.
+                     | return PathfinderMob.createMobAttributes()
+
+[preflight] 220 file(s) scanned -- 0 blocking, 2 advisory
+[preflight] symbol oracle: 64 class(es) from 116 javap dump(s)
+[preflight]   note   api-drift        2
+
+run: python3 ci/preflight.py --roots --quiet   (gate default)
+
+[preflight] 220 file(s) scanned -- 0 blocking, 2 advisory
+[preflight] symbol oracle: 64 class(es) from 116 javap dump(s)
+[preflight]   note   api-drift        2
+exit=0
+
+run: python3 ci/tests/test_preflight.py
+  ok   unbalanced bracket is caught
+  ok   lossy double->float is caught
+  ok   non-final lambda capture is caught
+  ok   constructor-lookalike declarator is caught
+  ok   clean file reports nothing at all
+  ok   LossyFloat.java has exactly one finding, on the broken method
+  ok   LambdaCapture.java has exactly one finding, on the broken method
+  ok   all 7 checks exercised
+  ok   exit codes: findings -> 1, clean -> 0
+preflight tests: 9 passed, 0 failed

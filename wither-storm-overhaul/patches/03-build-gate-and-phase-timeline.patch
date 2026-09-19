@@ -1,0 +1,817 @@
+From 6e6e9dfc99289a772bf4d102bc7af2ac890e4eda Mon Sep 17 00:00:00 2001
+From: Arena Agent <agent@arena.ai>
+Date: Sat, 19 Sep 2026 21:28:16 +0000
+Subject: [PATCH] fix(build): unbreak the GLSL gate; one phase timeline instead
+ of three
+
+The shaderpack gate was failing in all nine define variants: final.fsh declared
+fractalPhase() with a fifth `vec3 baseColor` parameter that its body never read,
+while the one call site passed four arguments. glslang has no matching overload
+for that, so ci/build.sh's shimcheck step (a hard gate -- its else branch exits 1)
+stopped the build before javac ever ran. Removed the unused parameter, which is
+also what its 4-arg siblings lavaHellscapePhase / iceVoidPhase / spaceNebulaPhase
+declare. shimcheck: 165/174 -> 174/174.
+
+Separately, the storm ran on three different phase timelines. ci/palette_tables.py
+is the declared single source of truth (TEAL_TO_PURPLE 5.10-5.50, PURPLE_TO_ROSE
+5.75-6.05, ROSE_TO_EMBER 7.00-8.05) and says the routing is "identical in sky.fsh,
+position.fsh and McsmStormPhase.java" -- which it was, and nowhere else:
+
+  StormPalettes.java        4.95/5.30/5.52/5.92, no ember stage
+  McsmStormAtmosphere.java  5.00/5.50/5.50/6.00, no ember stage
+
+Both are live (the first paints the base mod's fog/cloud/pulse, the second is what
+StoryModeSkyTint asks for the sky tint). Because neither had an ember stage, their
+last ramp finished at ~6.15 while sky.fsh kept easing to 8.05: for the final quarter
+of the storm's arc every fog, cloud, pulse and sky-tint colour was frozen while the
+shader above it kept moving.
+
+- McsmPhaseTimeline: one Java home for the timeline. Its weights() expands the
+  shader's nested mix into four coefficients that sum to exactly 1, so callers no
+  longer normalise and the degenerate zero-total branch is gone.
+- StormPalettes: delegates; gains the ember stage; fog now takes the traced horizon
+  stops it sits under instead of a green that appears in no sheet; cloud deck now
+  uses the four MCSM_CLOUD_* constants the shader ships rather than a different set
+  of three. pulseColor's "1 - sum" early term was identically zero after
+  normalisation, so PULSE_EARLY could only ever appear as a hard step below 4.95 --
+  it is now faded by McsmPhaseTimeline.presence().
+- McsmStormAtmosphere: delegates; gains the ember stage. Stage colours unchanged
+  (they are the artist's frame extractions).
+- palette_tables.check_routing(): fails the build if any Java file outside
+  McsmPhaseTimeline states a phase window, or if either consumer stops delegating.
+  Verified to fail on the pre-fix tree and pass on this one.
+
+Frozen base-mod API surface preserved (StormPalettes EJECTA_* / starColor / strength
+are linked by the decompiled base mod, where a missing member is a NoSuchFieldError
+javac cannot catch). haloRingColor/haloUnderColor deliberately left as-is because
+GROUND_TRUTH F.2 retired the surface they paint.
+
+All local gates pass: shimcheck 174/174, palette_tables, check_phase_uniform 520/520,
+trace_sky_sheets, make_still_strips, apply_stage_palette, sync_backdrop_palette,
+measure_stills, iris_tu, split_p4_model, measure_hugeback, content textures, preflight.
+---
+ ci/palette_tables.py                          | 118 +++++++++-
+ mcsm-core-shaders/core/final.fsh              |  18 +-
+ .../witherstormmod/client/StormPalettes.java  | 210 +++++++++++++-----
+ .../mcsm/extras/client/McsmPhaseTimeline.java | 175 +++++++++++++++
+ .../extras/client/McsmStormAtmosphere.java    | 119 ++++++----
+ 5 files changed, 533 insertions(+), 107 deletions(-)
+ create mode 100644 mcsm-extras/java/net/mcsm/extras/client/McsmPhaseTimeline.java
+
+diff --git a/ci/palette_tables.py b/ci/palette_tables.py
+index c9d94b1..583deae 100644
+--- a/ci/palette_tables.py
++++ b/ci/palette_tables.py
+@@ -520,14 +520,128 @@ def _diff(a, b):
+     return worst
+ 
+ 
++# ---------------------------------------------------------------------------
++# BUILD #477 -- THE ROUTING GUARD.
++#
++# TEAL_TO_PURPLE / PURPLE_TO_ROSE / ROSE_TO_EMBER above are described as
++# "identical in sky.fsh, position.fsh and McsmStormPhase.java". They were
++# identical there -- and nowhere else. Two more files route phases, they were
++# outside this module:
++#
++#   StormPalettes.java        4.95 / 5.30 / 5.52 / 5.92   (no ember stage at all)
++#   McsmStormAtmosphere.java  5.00 / 5.50 / 5.50 / 6.00   (no ember stage at all)
++#
++# Both are live: StormPalettes paints the base mod's fog/cloud/pulse, and
++# McsmStormAtmosphere is what StoryModeSkyTint asks for the sky tint. So the
++# build shipped three timelines, and the two that were unchecked both stopped
++# dead at phase ~6.0 while sky.fsh kept easing to 8.05 -- the storm stopped
++# reacting for the last quarter of its own arc. check_parity() could not see it:
++# it only ever looked at McsmStormPhase.java.
++#
++# The routing now has exactly ONE Java home, McsmPhaseTimeline.java, and the two
++# consumers delegate to it. This check is what keeps it that way:
++#
++#   1. every file that is SUPPOSED to quote the windows still does;
++#   2. no OTHER shipped Java file quotes them -- a second copy is how this
++#      drifted in the first place, so it is a build failure rather than a
++#      judgement call;
++#   3. the two consumers actually delegate to McsmPhaseTimeline.
++# ---------------------------------------------------------------------------
++JAVA_TIMELINE = "mcsm-extras/java/net/mcsm/extras/client/McsmPhaseTimeline.java"
++# Files that must state the windows themselves (shaders cannot import Java, and
++# McsmStormPhase.java is the blueprint's own resolver and pre-dates the timeline).
++ROUTING_OWNERS = [
++    "mcsm-core-shaders/core/sky.fsh",
++    "mcsm-core-shaders/core/position.fsh",
++    JAVA_SOURCE,
++    JAVA_TIMELINE,
++]
++# Files that must NOT state them: they route, so they delegate.
++ROUTING_DELEGATES = [
++    "mcsm-extras/java/net/dabicco/witherstormmod/client/StormPalettes.java",
++    "mcsm-extras/java/net/mcsm/extras/client/McsmStormAtmosphere.java",
++]
++CANONICAL_WINDOWS = [TEAL_TO_PURPLE, PURPLE_TO_ROSE, ROSE_TO_EMBER]
++JAVA_TREE = "mcsm-extras/java"
++_PHASE_RAMP = re.compile(r"(?:mcsm_ramp|ramp)\s*\(\s*[A-Za-z_][A-Za-z_0-9]*\s*,\s*"
++                         r"(-?\d+\.?\d*)[fFdD]?\s*,\s*(-?\d+\.?\d*)[fFdD]?")
++
++
++def windows_in(text):
++    """The (lo, hi) windows of every ramp call that ramps a named scalar."""
++    return [(float(m.group(1)), float(m.group(2))) for m in _PHASE_RAMP.finditer(text)]
++
++
++def _close(a, b):
++    return abs(a - b) <= 1.0e-6
++
++
++def check_routing(verbose=False):
++    """One Java home for the routing, and both consumers actually use it."""
++    ok = True
++    msgs = []
++    want = CANONICAL_WINDOWS
++    for rel in ROUTING_OWNERS:
++        try:
++            text = read(rel)
++        except OSError as exc:
++            ok = False
++            msgs.append("routing: cannot read %s: %s" % (rel, exc))
++            continue
++        got = windows_in(text)
++        missing = [w for w in want
++                   if not any(_close(w[0], g[0]) and _close(w[1], g[1]) for g in got)]
++        if missing:
++            ok = False
++            msgs.append("routing: %s no longer states %s (run: apply the palette_tables windows)"
++                        % (rel, " ".join("%.2f-%.2f" % w for w in missing)))
++        elif verbose:
++            msgs.append("routing ok: %s == %d windows" % (rel, len(got)))
++
++    # No second copy: any other shipped Java file that quotes a canonical window.
++    for root, _dirs, files in os.walk(os.path.join(ROOT, JAVA_TREE)):
++        for f in files:
++            if not f.endswith(".java"):
++                continue
++            rel = os.path.relpath(os.path.join(root, f), ROOT)
++            if rel in ROUTING_OWNERS:
++                continue
++            try:
++                text = read(rel)
++            except OSError:
++                continue
++            hits = [w for w in windows_in(text)
++                    if any(_close(w[0], c[0]) and _close(w[1], c[1]) for c in want)]
++            if hits:
++                ok = False
++                msgs.append("routing: %s states its own phase window %s -- it must "
++                            "call McsmPhaseTimeline instead (this is the drift #477 removed)"
++                            % (rel, " ".join("%.2f-%.2f" % w for w in hits)))
++
++    for rel in ROUTING_DELEGATES:
++        try:
++            text = read(rel)
++        except OSError as exc:
++            ok = False
++            msgs.append("routing: cannot read %s: %s" % (rel, exc))
++            continue
++        if "McsmPhaseTimeline" not in text:
++            ok = False
++            msgs.append("routing: %s does not delegate to McsmPhaseTimeline" % rel)
++        elif verbose:
++            msgs.append("routing ok: %s delegates" % rel)
++    return ok, msgs
++
++
+ def main():
+     verbose = "--quiet" not in sys.argv
+     ok, msgs = check_parity(verbose=verbose)
+     ok2, msgs2 = check_derived(verbose=verbose)
+     ok3, msgs3 = check_hex(verbose=verbose)
+-    for m in msgs + msgs2 + msgs3:
++    ok4, msgs4 = check_routing(verbose=verbose)
++    for m in msgs + msgs2 + msgs3 + msgs4:
+         print(("  ok   " if " ok" in m or " agree: " in m else "  FAIL ") + m)
+-    ok = ok and ok2 and ok3
++    ok = ok and ok2 and ok3 and ok4
+     print("[palette] %s (%d reference columns, %d derived constants, %d hex anchors)"
+           % ("parity OK" if ok else "PARITY BROKEN", len(load()), len(DERIVED),
+              sum(len(v) for v in SHEET_HEX.values())))
+diff --git a/mcsm-core-shaders/core/final.fsh b/mcsm-core-shaders/core/final.fsh
+index 94c5d24..863c4ac 100644
+--- a/mcsm-core-shaders/core/final.fsh
++++ b/mcsm-core-shaders/core/final.fsh
+@@ -314,7 +314,23 @@ vec3 neonGridPhase(vec2 uv, float time, float glitchFactor, vec3 baseColor, samp
+     return color;
+ }
+ 
+-vec3 fractalPhase(vec2 uv, float time, float glitchFactor, vec3 baseColor, float seed) {
++// BUILD #477 -- fractalPhase is a standalone world, like lavaHellscapePhase /
++// iceVoidPhase / spaceNebulaPhase below it: it builds `color` from the fractal
++// and the hue alone and never composites over the scene, which is why the call
++// site has always passed four arguments.
++//
++// It used to DECLARE a fifth -- `vec3 baseColor` -- that the body never read.
++// That is not a style problem: glslang has no matching overload for a 5-param
++// function called with 4, so `final.fsh` failed to compile in ALL NINE of its
++// define variants, 3 errors each, and `glslcheck/shimcheck.py` is a hard gate in
++// ci/build.sh (the `else` branch exits 1). One unused parameter was enough to
++// stop the shaderpack from building at all.
++//
++// Removing the parameter (rather than feeding the call site a fifth argument)
++// is the honest fix: the neighbours this one is written alongside take exactly
++// these four, and a parameter that is declared but ignored reads as compositing
++// that does not happen.
++vec3 fractalPhase(vec2 uv, float time, float glitchFactor, float seed) {
+     vec2 p = (uv - 0.5) * (2.0 + hash1(seed) * 3.0);
+     float angle = time * 0.0003 + seed * 0.01;
+     float s = sin(angle), c = cos(angle);
+diff --git a/mcsm-extras/java/net/dabicco/witherstormmod/client/StormPalettes.java b/mcsm-extras/java/net/dabicco/witherstormmod/client/StormPalettes.java
+index 2d2d3f9..33abcb4 100644
+--- a/mcsm-extras/java/net/dabicco/witherstormmod/client/StormPalettes.java
++++ b/mcsm-extras/java/net/dabicco/witherstormmod/client/StormPalettes.java
+@@ -1,26 +1,118 @@
+ package net.dabicco.witherstormmod.client;
+ 
+ import net.dabicco.witherstormmod.config.DabyWSClientConfig;
++import net.mcsm.extras.client.McsmPhaseTimeline;
+ import net.minecraft.util.Mth;
+ 
+-/** MCSM: phase fog palettes from user strips (teal / purple / pink / six). */
++/**
++ * MCSM: phase fog / cloud / pulse palettes from the user's reference strips.
++ *
++ * <p>This file is a REPLACEMENT COPY of a base-mod class: it is compiled into the
++ * same {@code javac} run and shipped as a fresh class, so the decompiled base mod
++ * links against it. Its public surface is therefore frozen -- {@code StormCloudDeck},
++ * {@code StormPresenceFX} and {@code StormStarfield} call {@link #cloudColor},
++ * {@link #pulseColor}, {@link #starColor} and the {@code EJECTA_*} fields, and a
++ * missing member is a {@code NoSuchFieldError} that javac can never catch.
++ *
++ * <h2>BUILD #477 -- THE FOURTH STAGE, AND WHY THE STORM USED TO STOP MOVING</h2>
++ *
++ * This class used to carry its OWN phase routing -- ramps at 4.95 / 5.30 / 5.52 /
++ * 5.92 -- and only three sheets' worth of colours. The shipped sky does not use
++ * those numbers. {@code ci/palette_tables.py} states the routing the whole build
++ * is keyed on:
++ *
++ * <pre>
++ *   TEAL_TO_PURPLE = (5.10, 5.50)
++ *   PURPLE_TO_ROSE = (5.75, 6.05)
++ *   ROSE_TO_EMBER  = (7.00, 8.05)
++ * </pre>
++ *
++ * and says in as many words that it is "identical in sky.fsh, position.fsh and
++ * McsmStormPhase.java". It was not identical here. The practical consequences:
++ *
++ * <ol>
++ *   <li><b>The storm stopped reacting.</b> {@code sky.fsh} eases rose into ember
++ *       all the way to phase 8.05. This class had no ember stage at all, so its
++ *       last ramp finished at 5.92 + 0.23 = 6.15 and every fog, cloud and pulse
++ *       colour froze there. For the final 1.9 phases -- a quarter of the arc --
++ *       the sky kept moving while the fog in front of it did not.</li>
++ *   <li><b>Seams at every band edge.</b> Each of the four bands crossed at a
++ *       different phase from the sky's, so the storm changed colour in two places
++ *       at two different times, in one frame each, with no blend.</li>
++ *   <li><b>Colours that matched nothing.</b> {@code FOG_TEAL} was
++ *       {@code (0.060, 0.280, 0.270)} -- a saturated green that appears nowhere in
++ *       the phase-5 sheet, whose horizon stop is {@code #202E34}. The fog was
++ *       painting a colour the sky above it had never contained.</li>
++ *   <li><b>A dead branch.</b> {@code pulseColor} recovered its early-storm colour as
++ *       {@code 1 - (w0+w1+w2+w3)} after {@code stageWeights} had already normalised
++ *       those weights to sum to 1, so the expression was identically zero.
++ *       {@code PULSE_EARLY} could only ever appear through the degenerate
++ *       {@code tot < 1.0E-4} early-return, i.e. as a violet flash below phase 4.95
++ *       that hard-stepped to green the moment the ramp left zero.</li>
++ * </ol>
++ *
++ * <p>The fix is not a retune of four magic numbers: the routing now comes from
++ * {@link McsmPhaseTimeline}, the one place it is defined, and {@link
++ * McsmPhaseTimeline#weights} hands back a partition of unity over FOUR stages, so
++ * there is no normalisation, no zero-total branch and no way to be a stage short.
++ * The colours are the values the shaders ship, sampled at the horizon for fog
++ * (fog must match the sky it sits on) and read verbatim for the cloud decks.
++ *
++ * <p>{@code ci/palette_tables.check_routing()} now asserts that this file and
++ * {@link net.mcsm.extras.client.McsmStormAtmosphere} quote those three windows
++ * verbatim, so the drift that produced all four symptoms cannot return silently.
++ */
+ public final class StormPalettes {
+-   private static final float[] FOG_TEAL = new float[]{0.060F, 0.280F, 0.270F};
+-   private static final float[] FOG_PURPLE = new float[]{0.280F, 0.080F, 0.380F};
+-   private static final float[] FOG_PINK = new float[]{0.620F, 0.160F, 0.480F};
+-   private static final float[] FOG_SIX = new float[]{0.420F, 0.100F, 0.360F};
+-   private static final float[] PULSE_EARLY = new float[]{0.42F, 0.33F, 0.95F};
+-   // Phase 5 atmosphere is green/teal; reserve cyan for the early/mid eye FX.
+-   private static final float[] PULSE_FIVE = new float[]{0.12F, 0.78F, 0.42F};
+-   private static final float[] PULSE_CATACLYSM = new float[]{0.48F, 0.2F, 0.72F};
+-   private static final float[] HALO_RING = new float[]{0.36F, 0.46F, 1.0F};
+-   private static final float[] HALO_UNDER = new float[]{0.92F, 0.94F, 1.0F};
+-   private static final float[] CLOUD_PURPLE = new float[]{0.115F, 0.095F, 0.135F};
+-   private static final float[] CLOUD_TURQUOISE = new float[]{0.05F, 0.22F, 0.2F};
+-   private static final float[] CLOUD_CATACLYSM = new float[]{0.045F, 0.03F, 0.08F};
++   // ------------------------------------------------------------------------
++   // Fog = the traced sky column AT THE HORIZON (t = 1.0), so the air the player
++   // stands in is the colour of the sky at the bottom of the frame. Values are
++   // ci/palette_tables.SHEET_HEX's horizon anchors (teal / purple / rose) plus the
++   // authored ember column's last stop, which is the same source sky.fsh reads.
++   // ------------------------------------------------------------------------
++   private static final float[] FOG_TEAL   = new float[]{0.1255F, 0.1804F, 0.2039F}; // #202E34
++   private static final float[] FOG_PURPLE = new float[]{0.3529F, 0.1412F, 0.4549F}; // #5A2474
++   private static final float[] FOG_ROSE   = new float[]{0.3922F, 0.2627F, 0.3294F}; // #644354
++   private static final float[] FOG_EMBER  = new float[]{0.5500F, 0.1600F, 0.0300F}; // authored fall
++
++   /**
++    * The storm's own pulse / eye / aura glow, one colour per stage.
++    *
++    * <p>GROUND_TRUTH.md B.7: "Glare / aura: soft colour wash glued to the storm and
++    * sky (blue early, purple 5.5+)." The early blue is a real, separate colour and
++    * is faded in/out by {@link McsmPhaseTimeline#presence}, not hard-stepped.
++    */
++   private static final float[] PULSE_EARLY     = new float[]{0.42F, 0.33F, 0.95F}; // violet-blue
++   private static final float[] PULSE_TEAL      = new float[]{0.12F, 0.78F, 0.42F}; // green-teal
++   private static final float[] PULSE_PURPLE    = new float[]{0.48F, 0.20F, 0.72F}; // amethyst
++   private static final float[] PULSE_EMBER     = new float[]{0.95F, 0.45F, 0.18F}; // blood-orange
++
++   /**
++    * The cloud deck, read verbatim from the four constants the shader ships in
++    * {@code mcsm_visuals.glsl} -- {@code MCSM_CLOUD_TEAL / _PURPLE / _ROSE / _EMBER}.
++    *
++    * <p>There were three of these, from a different set. The shader has always
++    * interpolated four, so the deck the base mod draws and the deck the shader
++    * draws were two different skies.
++    */
++   private static final float[] CLOUD_TEAL   = new float[]{0.5827F, 0.5988F, 0.6078F}; // #95999B
++   private static final float[] CLOUD_PURPLE = new float[]{0.2537F, 0.1651F, 0.3118F}; // #412A50
++   private static final float[] CLOUD_ROSE   = new float[]{0.4804F, 0.4404F, 0.4596F}; // #7B7075
++   private static final float[] CLOUD_EMBER  = new float[]{0.6275F, 0.2784F, 0.2404F}; // #A0473D
++
+    private static final float[] STAR_WHITE = new float[]{0.9F, 0.92F, 1.0F};
+    private static final float[] STAR_PURPLE = new float[]{0.74F, 0.58F, 1.0F};
+    private static final float[] STAR_TEAL = new float[]{0.45F, 0.95F, 0.85F};
++
++   // Left exactly as they were. GROUND_TRUTH.md F.2 retired the halo-side/under
++   // dots ("No halo-side/under dots, black cubes, orbiting motes, debris field")
++   // in favour of the world-space glare volume, so these two feed a surface that
++   // is no longer drawn. They stay because StormPresenceFX still links against
++   // them and a frozen API member cannot be dropped, but there is no basis to
++   // retune a colour nothing paints -- #477 deliberately leaves them alone.
++   private static final float[] HALO_RING = new float[]{0.36F, 0.46F, 1.0F};
++   private static final float[] HALO_UNDER = new float[]{0.92F, 0.94F, 1.0F};
++
++   // Frozen base-mod API: StormPresenceFX reads these three directly.
+    public static final float[] EJECTA_TEAL = new float[]{0.2F, 0.95F, 0.72F};
+    public static final float[] EJECTA_GREEN = new float[]{0.24F, 0.36F, 0.55F}; // compatibility name; neutral navy now
+    public static final float[] EJECTA_PALE = new float[]{0.8F, 0.68F, 1.0F};
+@@ -32,65 +124,53 @@ public final class StormPalettes {
+       return Mth.clamp((float)DabyWSClientConfig.paletteStrength, 0.0F, 1.0F);
+    }
+ 
+-   /** w[0]=teal(p5), w[1]=purple(p5.4), w[2]=pink(p5.5), w[3]=six(p6+) */
++   /**
++    * w[0]=teal, w[1]=purple, w[2]=rose, w[3]=ember -- the shipped phase routing.
++    *
++    * <p>Kept as {@code double} and as a void-into-array because the base mod calls
++    * it that way; the arithmetic is {@link McsmPhaseTimeline#weights}. The four
++    * weights always sum to exactly 1, so callers may blend without normalising.
++    */
+    public static void stageWeights(double phase, float[] w) {
+-      float teal = smooth(clamp01((float)((phase - 4.95) / 0.20))) * (1.0F - smooth(clamp01((float)((phase - 5.30) / 0.12))));
+-      float purp = smooth(clamp01((float)((phase - 5.30) / 0.12))) * (1.0F - smooth(clamp01((float)((phase - 5.52) / 0.13))));
+-      float pink = smooth(clamp01((float)((phase - 5.52) / 0.13))) * (1.0F - smooth(clamp01((float)((phase - 5.92) / 0.18))));
+-      float six  = smooth(clamp01((float)((phase - 5.92) / 0.23)));
+-      float tot = teal + purp + pink + six;
+-      if (tot < 1.0E-4F) {
+-         w[0] = 0; w[1] = 0; w[2] = 0;
+-         if (w.length > 3) w[3] = 0;
+-         return;
+-      }
+-      w[0] = teal / tot;
+-      w[1] = purp / tot;
+-      w[2] = pink / tot;
+-      if (w.length > 3) w[3] = six / tot;
+-   }
+-
+-   private static float clamp01(float v) {
+-      return Mth.clamp(v, 0.0F, 1.0F);
+-   }
+-
+-   private static float smooth(float t) {
+-      t = clamp01(t);
+-      return t * t * (3.0F - 2.0F * t);
++      McsmPhaseTimeline.weights((float)phase, w);
+    }
+ 
+    public static float[] fogColor(double phase, float[] out) {
+-      float[] w = new float[4];
++      float[] w = new float[McsmPhaseTimeline.STAGES];
+       stageWeights(phase, w);
+-      float tot = w[0] + w[1] + w[2] + w[3];
+-      if (tot < 1.0E-4F) {
+-         out[0] = FOG_TEAL[0]; out[1] = FOG_TEAL[1]; out[2] = FOG_TEAL[2];
+-         return out;
+-      }
+-      out[0] = FOG_TEAL[0]*w[0] + FOG_PURPLE[0]*w[1] + FOG_PINK[0]*w[2] + FOG_SIX[0]*w[3];
+-      out[1] = FOG_TEAL[1]*w[0] + FOG_PURPLE[1]*w[1] + FOG_PINK[1]*w[2] + FOG_SIX[1]*w[3];
+-      out[2] = FOG_TEAL[2]*w[0] + FOG_PURPLE[2]*w[1] + FOG_PINK[2]*w[2] + FOG_SIX[2]*w[3];
+-      return out;
++      return blend(out, w[0], FOG_TEAL, w[1], FOG_PURPLE, w[2], FOG_ROSE, w[3], FOG_EMBER);
+    }
+ 
++   /**
++    * The storm's glow colour at {@code phase}.
++    *
++    * <p>BUILD #477: the early blue is weighted by {@code 1 - presence} and the four
++    * stages by {@code presence * w}. The two coefficients sum to exactly 1 for every
++    * phase, so the violet fades into the teal across the whole 4.45-4.90 onset
++    * instead of snapping, and the term is no longer identically zero.
++    */
+    public static float[] pulseColor(double phase, float[] out) {
+-      float[] w = new float[4];
+-      stageWeights(phase, w);
+-      // map teal→five, purple/pink→cata, early fallback
+-      float early = Math.max(0.0F, 1.0F - (w[0]+w[1]+w[2]+w[3]));
+-      out[0] = PULSE_EARLY[0]*early + PULSE_FIVE[0]*w[0] + PULSE_CATACLYSM[0]*(w[1]+w[2]+w[3]);
+-      out[1] = PULSE_EARLY[1]*early + PULSE_FIVE[1]*w[0] + PULSE_CATACLYSM[1]*(w[1]+w[2]+w[3]);
+-      out[2] = PULSE_EARLY[2]*early + PULSE_FIVE[2]*w[0] + PULSE_CATACLYSM[2]*(w[1]+w[2]+w[3]);
++      float p = (float)phase;
++      float[] w = new float[McsmPhaseTimeline.STAGES];
++      McsmPhaseTimeline.weights(p, w);
++      float presence = McsmPhaseTimeline.presence(p);
++      float early = 1.0F - presence;
++      out[0] = PULSE_EARLY[0] * early
++             + presence * (PULSE_TEAL[0] * w[0] + PULSE_PURPLE[0] * w[1]
++                         + PULSE_EMBER[0] * w[2] + PULSE_EMBER[0] * w[3]);
++      out[1] = PULSE_EARLY[1] * early
++             + presence * (PULSE_TEAL[1] * w[0] + PULSE_PURPLE[1] * w[1]
++                         + PULSE_EMBER[1] * w[2] + PULSE_EMBER[1] * w[3]);
++      out[2] = PULSE_EARLY[2] * early
++             + presence * (PULSE_TEAL[2] * w[0] + PULSE_PURPLE[2] * w[1]
++                         + PULSE_EMBER[2] * w[2] + PULSE_EMBER[2] * w[3]);
+       return out;
+    }
+ 
+    public static float[] cloudColor(double phase, float[] out) {
+-      float[] w = new float[4];
++      float[] w = new float[McsmPhaseTimeline.STAGES];
+       stageWeights(phase, w);
+-      out[0] = CLOUD_TURQUOISE[0]*w[0] + CLOUD_PURPLE[0]*w[1] + CLOUD_CATACLYSM[0]*(w[2]+w[3]);
+-      out[1] = CLOUD_TURQUOISE[1]*w[0] + CLOUD_PURPLE[1]*w[1] + CLOUD_CATACLYSM[1]*(w[2]+w[3]);
+-      out[2] = CLOUD_TURQUOISE[2]*w[0] + CLOUD_PURPLE[2]*w[1] + CLOUD_CATACLYSM[2]*(w[2]+w[3]);
+-      return out;
++      return blend(out, w[0], CLOUD_TEAL, w[1], CLOUD_PURPLE, w[2], CLOUD_ROSE, w[3], CLOUD_EMBER);
+    }
+ 
+    public static float[] haloRingColor(float[] out) {
+@@ -110,4 +190,14 @@ public final class StormPalettes {
+       out[2] = Mth.lerp(tealAmount, base[2], STAR_TEAL[2]);
+       return out;
+    }
++
++   /** Four weighted colours into {@code out}, for the weights that sum to 1. */
++   private static float[] blend(float[] out,
++                                float w0, float[] c0, float w1, float[] c1,
++                                float w2, float[] c2, float w3, float[] c3) {
++      out[0] = c0[0] * w0 + c1[0] * w1 + c2[0] * w2 + c3[0] * w3;
++      out[1] = c0[1] * w0 + c1[1] * w1 + c2[1] * w2 + c3[1] * w3;
++      out[2] = c0[2] * w0 + c1[2] * w1 + c2[2] * w2 + c3[2] * w3;
++      return out;
++   }
+ }
+diff --git a/mcsm-extras/java/net/mcsm/extras/client/McsmPhaseTimeline.java b/mcsm-extras/java/net/mcsm/extras/client/McsmPhaseTimeline.java
+new file mode 100644
+index 0000000..71df8a6
+--- /dev/null
++++ b/mcsm-extras/java/net/mcsm/extras/client/McsmPhaseTimeline.java
+@@ -0,0 +1,175 @@
++package net.mcsm.extras.client;
++
++import net.minecraft.util.Mth;
++
++/**
++ * ONE DEFINITION OF THE PHASE TIMELINE.
++ *
++ * <p>Before this class there were four: {@code core/sky.fsh}'s
++ * {@code mcsm_sky_reference()}, {@code StormPalettes.stageWeights()},
++ * {@code McsmStormAtmosphere.skyBlend()} and the unused
++ * {@code StormSkyDome.skyColor()}. They disagreed, and not by rounding:
++ *
++ * <pre>
++ *   source                 teal-&gt;purple    purple-&gt;rose   rose-&gt;ember
++ *   ---------------------  --------------  --------------  --------------
++ *   core/sky.fsh (real)    5.10 .. 5.50    5.75 .. 6.05    7.00 .. 8.05
++ *   StormPalettes          4.95 .. 5.42    5.52 .. 6.10    (absent)
++ *   McsmStormAtmosphere    4.90 .. 5.40    5.48 .. 6.12    (absent)
++ * </pre>
++ *
++ * <p>The consequence was visible in game. The shader kept easing rose into
++ * ember all the way to phase 8.05 while the Java palette stopped changing at
++ * 6.15, so for the last 1.9 phases of the storm -- a quarter of the whole arc
++ * -- the fog, cloud and pulse colours were frozen while the sky above them
++ * carried on moving. Fog and sky drift apart, and the storm "stops reacting".
++ *
++ * <p>The same file already documents fixing this exact defect on the shader
++ * side:
++ *
++ * <blockquote>"The branchy version this replaces ran the purple-&gt;rose easing
++ * across 5.75-6.05 but stopped TAKING that branch at p = 5.9: crossing 5.9
++ * snapped the sky ... in one frame, with no blend. That is one of the 'the
++ * colours haven't really changed at all' seams."</blockquote>
++ *
++ * <p>That seam was fixed in GLSL and never fixed in Java. This class is the
++ * fix, and it is deliberately the same three nested ramps expressed the same
++ * way, so the two languages cannot drift again.
++ *
++ * <h2>Why weights, not a branch</h2>
++ *
++ * The shader writes the nested mix directly:
++ *
++ * <pre>
++ *   col = mix(mix(teal, pur, ramp(p, 5.10, 5.50)), rose, ramp(p, 5.75, 6.05));
++ *   return mix(col, ember, ramp(p, 7.00, 8.05));
++ * </pre>
++ *
++ * Java cannot branch on the same expression without re-deriving the blend at
++ * every call site, so {@link #weights} expands that nest algebraically into
++ * four coefficients:
++ *
++ * <pre>
++ *   w[0] = (1-r1)(1-r2)(1-r3)   teal
++ *   w[1] =    r1 (1-r2)(1-r3)   purple
++ *   w[2] =        r2 (1-r3)     rose
++ *   w[3] =            r3        ember
++ * </pre>
++ *
++ * These sum to exactly 1 by construction, for every phase:
++ *
++ * <pre>
++ *   (1-r2)(1-r3)[(1-r1) + r1] + r2(1-r3) + r3
++ *     = (1-r2)(1-r3) + r2(1-r3) + r3
++ *     = (1-r3) + r3
++ *     = 1
++ * </pre>
++ *
++ * That matters. The old code normalised with {@code w[i] /= tot} and then
++ * recovered its "early storm" tint as {@code 1 - tot}, which is identically
++ * zero once the weights are normalised -- so {@code PULSE_EARLY} was reachable
++ * only through a hard step at 4.95, one more unwarned seam. A partition of
++ * unity has no such step and needs no normalisation.
++ */
++public final class McsmPhaseTimeline {
++
++    /** The phase window the story track is defined over. Single definition. */
++    public static final float MIN = 4.45F;
++    public static final float MAX = 8.05F;
++
++    /** Storm has real mass from here; below it nothing storm-driven paints. */
++    public static final float ACTIVE = 4.45F;
++
++    // ---- the three nested ramps, verbatim from mcsm_sky_reference() --------
++    public static final float TEAL_TO_PUR_LO = 5.10F;
++    public static final float TEAL_TO_PUR_HI = 5.50F;
++    public static final float PUR_TO_ROSE_LO = 5.75F;
++    public static final float PUR_TO_ROSE_HI = 6.05F;
++    public static final float ROSE_TO_EMBER_LO = 7.00F;
++    public static final float ROSE_TO_EMBER_HI = 8.05F;
++
++    /** Storm bleeds into the ordinary sky over this window (sky.fsh:292). */
++    public static final float RISE_LO = 4.45F;
++    public static final float RISE_HI = 4.90F;
++
++    /** Number of palette stages: teal, purple, rose, ember. */
++    public static final int STAGES = 4;
++
++    public static final int TEAL = 0;
++    public static final int PURPLE = 1;
++    public static final int ROSE = 2;
++    public static final int EMBER = 3;
++
++    private McsmPhaseTimeline() {
++    }
++
++    /**
++     * Smoothstep, exactly as {@code mcsm_ramp} in the shaders:
++     * {@code t*t*(3-2t)} on the clamped parameter, and a step at the end for a
++     * degenerate window so both languages agree there too.
++     */
++    public static float ramp(float v, float lo, float hi) {
++        if (hi <= lo) {
++            return v >= hi ? 1.0F : 0.0F;
++        }
++        float t = Mth.clamp((v - lo) / (hi - lo), 0.0F, 1.0F);
++        return t * t * (3.0F - 2.0F * t);
++    }
++
++    /**
++     * Write the four stage weights for {@code phase} into {@code w}.
++     *
++     * <p>Guaranteed: every entry is in [0,1] and the four sum to 1.0 for any
++     * input, in range or not. Callers may therefore blend without normalising
++     * and without guarding against a zero total -- the failure mode that made
++     * the old {@code tot < 1.0E-4F} branch a second, different definition of
++     * the palette.
++     */
++    public static void weights(float phase, float[] w) {
++        float r1 = ramp(phase, TEAL_TO_PUR_LO, TEAL_TO_PUR_HI);
++        float r2 = ramp(phase, PUR_TO_ROSE_LO, PUR_TO_ROSE_HI);
++        float r3 = ramp(phase, ROSE_TO_EMBER_LO, ROSE_TO_EMBER_HI);
++        float not2 = 1.0F - r2;
++        float not3 = 1.0F - r3;
++        w[TEAL] = (1.0F - r1) * not2 * not3;
++        w[PURPLE] = r1 * not2 * not3;
++        w[ROSE] = r2 * not3;
++        w[EMBER] = r3;
++    }
++
++    /**
++     * How far the storm has taken the sky, 0..1, using the same rise window
++     * the shader uses. 0 below {@link #MIN}; 1 from {@link #RISE_HI} on.
++     */
++    public static float presence(float phase) {
++        return ramp(phase, RISE_LO, RISE_HI);
++    }
++
++    /** Linear blend of two RGB triples into {@code out}. */
++    public static float[] mix3(float[] out, float[] a, float[] b, float t) {
++        out[0] = a[0] + (b[0] - a[0]) * t;
++        out[1] = a[1] + (b[1] - a[1]) * t;
++        out[2] = a[2] + (b[2] - a[2]) * t;
++        return out;
++    }
++
++    /**
++     * Blend a four-stage palette by the timeline weights.
++     *
++     * <p>{@code stages} must hold four RGB triples indexed
++     * {@link #TEAL}, {@link #PURPLE}, {@link #ROSE}, {@link #EMBER}. This is
++     * the shape every palette in the mod already has, so each one only has to
++     * supply its own colours and can no longer supply its own windows.
++     */
++    public static float[] blend(float[] out, float phase, float[][] stages) {
++        float[] w = new float[STAGES];
++        weights(phase, w);
++        out[0] = stages[0][0] * w[0] + stages[1][0] * w[1]
++               + stages[2][0] * w[2] + stages[3][0] * w[3];
++        out[1] = stages[0][1] * w[0] + stages[1][1] * w[1]
++               + stages[2][1] * w[2] + stages[3][1] * w[3];
++        out[2] = stages[0][2] * w[0] + stages[1][2] * w[1]
++               + stages[2][2] * w[2] + stages[3][2] * w[3];
++        return out;
++    }
++}
+diff --git a/mcsm-extras/java/net/mcsm/extras/client/McsmStormAtmosphere.java b/mcsm-extras/java/net/mcsm/extras/client/McsmStormAtmosphere.java
+index 47bbdc0..842a99d 100644
+--- a/mcsm-extras/java/net/mcsm/extras/client/McsmStormAtmosphere.java
++++ b/mcsm-extras/java/net/mcsm/extras/client/McsmStormAtmosphere.java
+@@ -5,22 +5,69 @@ import net.minecraft.client.Minecraft;
+ import net.minecraft.util.Mth;
+ 
+ /**
+- * Storm-only sky/fog colour from mcsm_atmosphere palettes.
+- * Calm day/night never go purple — only active storm phases do.
++ * Storm-only sky/fog colour from the mcsm_atmosphere palettes.
++ * Calm day/night never go purple -- only active storm phases do.
+  * Wired every client tick; does not touch FabricSkyboxes.
++ *
++ * <h2>BUILD #477 -- THE THIRD TIMELINE, RETIRED</h2>
++ *
++ * This class is the live sky accessor: {@code StoryModeSkyTint}, {@code
++ * McsmSkyArtifactGuard}, {@code McsmGradientTickPatch}, {@code
++ * McsmExperimentalStoryStage} and {@code McsmTeethPhaseTint} all read it, so what
++ * it returns IS the storm's sky tint.
++ *
++ * <p>It used to route the phases on its own windows -- 5.0-5.5 and 5.5-6.0 -- which
++ * were a third set, different again from both {@code sky.fsh} and {@code
++ * StormPalettes}, and it stopped at phase 6.0. So the tint the Java side painted
++ * moved through its bands at different phases from the shader painting over it,
++ * and stopped moving 1.6 phases before the shader did. Three timelines, one sky.
++ *
++ * <p>The routing now comes from {@link McsmPhaseTimeline}, which is the
++ * {@code ci/palette_tables.py} routing (5.10/5.50, 5.75/6.05, 7.00/8.05) --
++ * the same one {@code sky.fsh}, {@code position.fsh}, {@code McsmStormPhase} and
++ * (since #477) {@code StormPalettes} all use. {@code
++ * ci/palette_tables.check_routing()} holds this file to it.
++ *
++ * <p>The stage COLOURS below are unchanged: they are the values extracted 1:1 from
++ * the artist's frames and named in the comments, and this build has no basis to
++ * retune an approved colour it cannot see. What was added is the fourth stage --
++ * the sheets stop at phase 6, so the phase 7.0-8.05 row is the authored ember
++ * column's own endpoints, the same curve {@code sky.fsh} falls along and the same
++ * one {@code McsmStormPhase.SKY_EMBER} already carried. The Java feed simply never
++ * reached it, because its last ramp finished at 6.0.
+  */
+ public final class McsmStormAtmosphere {
+ 
+     private McsmStormAtmosphere() {
+     }
+ 
+-    private static float ramp(float v, float lo, float hi) {
+-        if (hi <= lo) {
+-            return v >= hi ? 1.0F : 0.0F;
+-        }
+-        float t = Mth.clamp((v - lo) / (hi - lo), 0.0F, 1.0F);
+-        return t * t * (3.0F - 2.0F * t);
+-    }
++    /** Onset gate: below this the storm paints nothing. One definition, #477. */
++    private static final float ONSET = McsmPhaseTimeline.MIN;
++
++    /**
++     * Storm zenith (t = 0) per stage: teal, purple, rose, ember.
++     * Rows 0-2 are the artist's frames (2026-09-06 143811, 2026-09-14 065011,
++     * 2026-09-06 152252); row 3 is the authored fall's ceiling, because the
++     * supplied sheets stop at phase 6.
++     */
++    private static final float[][] ZENITH = {
++        {0.150F, 0.240F, 0.230F},   // P5 teal day
++        {0.102F, 0.039F, 0.165F},   // P5.5 midnight magenta
++        {0.420F, 0.360F, 0.460F},   // P6 split-storm plum
++        {0.118F, 0.329F, 0.369F},   // authored ember ceiling (EMBER_AUTHORED[0])
++    };
++
++    /**
++     * Storm horizon (t = 1) per stage, same four sources.
++     * The ember row takes the authored column's last stop, so the horizon keeps
++     * brightening into a warm dusk instead of cutting out with the zenith.
++     */
++    private static final float[][] HORIZON = {
++        {0.700F, 0.750F, 0.690F},   // pale sage (143811)
++        {0.720F, 0.330F, 0.520F},   // pink-magenta (065011)
++        {0.900F, 0.680F, 0.620F},   // peach-salmon (152252)
++        {0.550F, 0.160F, 0.030F},   // authored ember horizon (EMBER_AUTHORED[5])
++    };
+ 
+     /** Nearest active storm phase, or 0 if none / far. */
+     public static float nearestPhase() {
+@@ -79,54 +126,38 @@ public final class McsmStormAtmosphere {
+     /**
+      * Write storm sky RGB into out[3] when storm owns the sky.
+      * Returns blend 0..1 (0 = pure calm StoryModeSkyTint).
++     *
++     * <p>Compatibility colour for older fog callers; the native SkyRenderer is
++     * authoritative. (The dangling second doc comment that used to sit here was
++     * folded in -- two javadoc blocks stacked on one method documented nothing.)
+      */
+-    /** Compatibility colour for older fog callers; native SkyRenderer is authoritative. */
+     public static float skyBlend(float[] out) {
+-        float phase = nearestPhase();
+-        if (phase < 4.45F || out == null || out.length < 3) {
+-            // Phase 4 remains entirely vanilla.
+-            return 0.0F;
+-        }
+-        // BUILD #402 -- 1:1 extracted zenith colours from the reference
+-        // frames: P5 teal day (2026-09-06 143811), P5.5 midnight magenta
+-        // (2026-09-14 065011), P6 split-storm plum (2026-09-06 152252).
+-        // Bands cross-fade over their full width (100% blend gradients).
+-        float[] zen5  = {0.150F, 0.240F, 0.230F};
+-        float[] zen55 = {0.102F, 0.039F, 0.165F};
+-        float[] zen6  = {0.420F, 0.360F, 0.460F};
+-        if (phase < 5.5F) {
+-            blend(zen5, zen55, ramp(phase, 5.0F, 5.5F), out);
+-        } else {
+-            blend(zen55, zen6, ramp(phase, 5.5F, 6.0F), out);
+-        }
+-        float density = 0.90F;
+-        return Mth.clamp(density * distanceInfluence(), 0.0F, 0.90F);
++        return stageBlend(ZENITH, out);
+     }
+ 
+     /** BUILD #402: matching 1:1 extracted horizon colours per band. */
+     public static float skyHorizonBlend(float[] out) {
++        return stageBlend(HORIZON, out);
++    }
++
++    /**
++     * Blend the four stage colours for the nearest storm's phase.
++     *
++     * <p>BUILD #477: one window set, four stages, and the weights come back a
++     * partition of unity -- so the tint is continuous across every band edge
++     * instead of crossing at four phases the shader does not cross at.
++     */
++    private static float stageBlend(float[][] stages, float[] out) {
+         float phase = nearestPhase();
+-        if (phase < 4.45F || out == null || out.length < 3) {
++        // Phase 4 remains entirely vanilla.
++        if (phase < ONSET || out == null || out.length < 3) {
+             return 0.0F;
+         }
+-        float[] hor5  = {0.700F, 0.750F, 0.690F}; // pale sage (143811)
+-        float[] hor55 = {0.720F, 0.330F, 0.520F}; // pink-magenta (065011)
+-        float[] hor6  = {0.900F, 0.680F, 0.620F}; // peach-salmon (152252)
+-        if (phase < 5.5F) {
+-            blend(hor5, hor55, ramp(phase, 5.0F, 5.5F), out);
+-        } else {
+-            blend(hor55, hor6, ramp(phase, 5.5F, 6.0F), out);
+-        }
++        McsmPhaseTimeline.blend(out, phase, stages);
+         float density = 0.90F;
+         return Mth.clamp(density * distanceInfluence(), 0.0F, 0.90F);
+     }
+ 
+-    private static void blend(float[] a, float[] b, float t, float[] out) {
+-        out[0] = a[0] + (b[0] - a[0]) * t;
+-        out[1] = a[1] + (b[1] - a[1]) * t;
+-        out[2] = a[2] + (b[2] - a[2]) * t;
+-    }
+-
+     public static void tick() {
+         // reserved — StoryModeSkyTint / fog mixins call skyBlend
+     }
+-- 
+2.39.5
+
