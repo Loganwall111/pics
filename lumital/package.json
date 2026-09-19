@@ -1,0 +1,17 @@
+{
+  "name": "lumital",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "LUMITAL — psychedelic multiverse evolution explorer. Deps are installed by the workspace root (identical versions); this manifest documents the game's own runtime surface.",
+  "scripts": {
+    "dev": "vite --config vite.config.ts",
+    "build": "vite build --config vite.config.ts"
+  },
+  "dependencies": {
+    "react": "~19.2.0",
+    "react-dom": "~19.2.0",
+    "three": "^0.180.0",
+    "@react-three/fiber": "^9.7.0"
+  }
+}

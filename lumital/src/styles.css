@@ -1,0 +1,178 @@
+/* LUMITAL UI (v0.1) */
+
+/* ---- Main menu ---- */
+.lum-menu {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  color: #e8ddff;
+  font-family: "Segoe UI", system-ui, sans-serif;
+}
+.lum-pane-left {
+  flex: 0 0 clamp(320px, 34vw, 430px);
+  padding: 34px 26px 26px;
+  overflow-y: auto;
+  border-right: 1px solid rgba(160, 110, 255, 0.14);
+  background: linear-gradient(100deg, rgba(10, 2, 22, 0.55), rgba(10, 2, 22, 0.15));
+}
+.lum-pane-right {
+  flex: 1;
+  overflow-y: auto;
+  padding: 26px clamp(16px, 3vw, 40px) 60px;
+}
+.lum-menu-bg {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(900px 600px at 20% 15%, rgba(180, 60, 255, 0.25), transparent 60%),
+    radial-gradient(1000px 700px at 80% 30%, rgba(0, 220, 255, 0.16), transparent 55%),
+    radial-gradient(800px 800px at 50% 90%, rgba(255, 60, 180, 0.18), transparent 60%),
+    linear-gradient(160deg, #0a0212 0%, #12042a 45%, #050110 100%);
+  animation: lum-drift 14s ease-in-out infinite alternate;
+}
+@keyframes lum-drift {
+  from { filter: hue-rotate(0deg) saturate(1); }
+  to { filter: hue-rotate(40deg) saturate(1.25); }
+}
+.lum-kicker { font-size: 11px; letter-spacing: 0.5em; color: #b98aff; }
+.lum-title {
+  font-size: clamp(52px, 8vw, 96px);
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  margin: 8px 0 2px;
+  background: linear-gradient(92deg, #8ef5ff, #c77fff 45%, #ff7ad9 80%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  text-shadow: 0 0 60px rgba(150, 100, 255, 0.35);
+}
+.lum-tag { color: #b3a4d6; font-size: 13px; line-height: 1.5; margin-bottom: 14px; }
+.species-filter-row {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 4px 12px;
+  background: linear-gradient(180deg, rgba(10, 2, 22, 0.92), rgba(10, 2, 22, 0.55) 80%, transparent);
+  backdrop-filter: blur(6px);
+}
+.species-filter {
+  padding: 6px 14px; font-size: 12px; letter-spacing: 0.06em;
+  background: rgba(30, 12, 60, 0.6); color: #c6b2f0;
+  border: 1px solid rgba(170, 120, 255, 0.25); border-radius: 999px; cursor: pointer;
+}
+.species-filter:hover { border-color: rgba(200, 150, 255, 0.6); }
+.species-filter.active { background: rgba(120, 70, 220, 0.55); border-color: #b07aff; color: #fff; }
+.species-count { margin-left: auto; font-size: 12px; color: #8d7cba; }
+.species-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  gap: 10px;
+  margin-top: 8px;
+}
+.inspector {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  padding: 14px;
+  border-radius: 14px;
+  background: rgba(16, 8, 34, 0.65);
+  border: 1px solid rgba(160, 110, 255, 0.25);
+  margin-bottom: 14px;
+}
+.inspector-glyph { width: 74px; height: 74px; flex: 0 0 74px; }
+.inspector-stats { display: flex; flex-direction: column; gap: 3px; }
+.inspector-name { font-size: 19px; font-weight: 800; color: #d9c8ff; }
+.inspector-line { font-size: 12px; color: #9c8cc4; }
+.species-card {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 6px;
+  padding: 12px; border-radius: 12px; cursor: pointer; text-align: left;
+  background: rgba(16, 8, 34, 0.6);
+  border: 1px solid rgba(160, 110, 255, 0.18);
+  color: inherit;
+  transition: border-color 120ms ease, transform 120ms ease, box-shadow 120ms ease;
+}
+.species-card:hover { border-color: rgba(190, 140, 255, 0.6); transform: translateY(-2px); }
+.species-card.selected {
+  border-color: #b07aff;
+  box-shadow: 0 0 24px rgba(150, 90, 255, 0.35);
+}
+.species-glyph { width: 42px; height: 42px; }
+.species-name { font-weight: 700; font-size: 14px; }
+.species-world { font-size: 11px; color: #9c8cc4; }
+.lum-start {
+  margin-top: 4px;
+  width: 100%;
+  padding: 16px;
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: 0.24em;
+  color: #12002a;
+  background: linear-gradient(90deg, #8ef5ff, #c77fff 55%, #ff7ad9);
+  border: 0; border-radius: 12px; cursor: pointer;
+  box-shadow: 0 8px 40px rgba(170, 90, 255, 0.45);
+  transition: transform 120ms ease;
+}
+.lum-start:hover { transform: translateY(-2px); }
+.lum-worlds-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.lum-world-chip {
+  font-size: 11px; letter-spacing: 0.08em; padding: 6px 12px; border-radius: 999px;
+  background: rgba(40, 16, 80, 0.5); border: 1px solid rgba(170, 120, 255, 0.25);
+  color: #c6b2f0;
+}
+.lum-hint { margin-top: 14px; font-size: 12px; color: #7f6da8; }
+
+/* ---- HUD ---- */
+.lum-game { position: fixed; inset: 0; color: #e8ddff; font-family: "Segoe UI", system-ui, sans-serif; }
+.lum-hud {
+  position: fixed; inset: 0; pointer-events: none; z-index: 5;
+  display: flex; justify-content: space-between; align-items: flex-start;
+  padding: 22px 26px;
+}
+.lum-hud-left, .lum-hud-right { pointer-events: auto; max-width: 320px; }
+.lum-dna { font-size: 22px; font-weight: 900; color: #7fffd4; text-shadow: 0 0 18px rgba(80, 255, 200, 0.4); }
+.lum-worldname { font-size: 17px; font-weight: 700; margin-top: 6px; }
+.lum-blurb { font-size: 12px; color: #a294c8; margin-top: 2px; }
+.lum-colonies { font-size: 12px; color: #ffd97f; margin-top: 8px; }
+.lum-log { display: flex; flex-direction: column; gap: 3px; align-items: flex-end; }
+.lum-log-line { font-size: 12px; color: #b7a8dd; }
+.lum-keys { font-size: 11px; color: #7f6da8; margin-top: 10px; text-align: right; }
+.lum-menu-btn {
+  margin-top: 8px; padding: 7px 16px; font-size: 11px; letter-spacing: 0.2em;
+  background: rgba(30, 12, 60, 0.7); color: #c6b2f0;
+  border: 1px solid rgba(170, 120, 255, 0.3); border-radius: 8px; cursor: pointer;
+}
+
+/* ---- Evolve overlay ---- */
+.lum-evolve {
+  position: fixed; inset: 0; z-index: 8;
+  background: rgba(5, 0, 15, 0.55);
+  display: flex; align-items: center; justify-content: center;
+}
+.lum-evolve-panel {
+  width: min(480px, 92vw);
+  background: rgba(18, 7, 40, 0.92);
+  border: 1px solid rgba(170, 120, 255, 0.35);
+  border-radius: 16px;
+  padding: 22px;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 20px 80px rgba(120, 60, 255, 0.3);
+}
+.lum-evolve-title { font-size: 16px; font-weight: 800; letter-spacing: 0.14em; margin-bottom: 14px; }
+.lum-trait-row {
+  display: grid; grid-template-columns: 1fr auto; gap: 2px 12px;
+  width: 100%; text-align: left; padding: 10px 12px; margin-bottom: 6px;
+  background: rgba(30, 14, 62, 0.6); border: 1px solid rgba(160, 110, 255, 0.2);
+  border-radius: 10px; color: inherit; cursor: pointer;
+}
+.lum-trait-row:hover:not(:disabled) { border-color: rgba(190, 140, 255, 0.65); }
+.lum-trait-row:disabled { opacity: 0.45; cursor: default; }
+.lum-trait-name { font-weight: 700; font-size: 13px; }
+.lum-trait-name em { font-style: normal; color: #9c8cc4; font-weight: 400; font-size: 11px; }
+.lum-trait-blurb { grid-column: 1; font-size: 11px; color: #9c8cc4; }
+.lum-trait-cost { grid-row: 1 / span 2; grid-column: 2; align-self: center; color: #7fffd4; font-weight: 800; }
+.lum-evolve-hint { margin-top: 10px; font-size: 11px; color: #7f6da8; }
