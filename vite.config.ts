@@ -16,10 +16,6 @@ export default defineConfig({
     allowedHosts: true as any,
     hmr: {
       clientPort: 443
-    },
-    headers: {
-      'Cross-Origin-Opener-Policy': 'same-origin',
-      'Cross-Origin-Embedder-Policy': 'require-corp'
     }
   },
   preview: {
